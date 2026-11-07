@@ -1,0 +1,222 @@
+package com.xern.xrnwallet.data
+
+import kotlinx.serialization.Serializable
+import java.io.File
+import java.security.MessageDigest
+
+/** The server copy this phone last matched, and what may have reached it since. */
+data class SyncMeta(
+    val version: Long? = null,
+    val hash: String? = null,
+    /** Uploads sent whose answer never came. Any of them may be what the server now holds. */
+    val unanswered: List<String> = emptyList(),
+    val syncedAt: Long = 0,
+)
+
+data class ServerCopy(val version: Long, val hash: String, val body: String, val updated: String)
+
+sealed interface PushResult {
+    data class Accepted(val version: Long) : PushResult
+
+    /** Someone wrote since the version this upload was based on. Nothing changed on the server. */
+    data class Stale(val version: Long, val hash: String, val updated: String) : PushResult
+}
+
+@Serializable
+data class EarlierCopy(val id: String, val version: Long, val updated: String, val by: String = "", val bills: Int = 0)
+
+sealed interface SyncOutcome {
+    data object UpToDate : SyncOutcome
+    data object Uploaded : SyncOutcome
+    data object Downloaded : SyncOutcome
+
+    /** The phone and the server each hold something the other lacks. Only a person can choose. */
+    data class Conflict(val updated: String) : SyncOutcome
+}
+
+class ServerFailure(val status: Int) : Exception(failureText(status)) {
+    /** Worth trying again by itself, unlike a wrong password. */
+    val temporary: Boolean get() = status == 0 || status >= 500
+}
+
+fun failureText(status: Int): String = when {
+    status == 401 -> "Wrong user name or password."
+    status == 429 -> "Too many wrong passwords. Try again in 15 minutes."
+    status == 404 -> "Nothing answers at that address. Check it ends in /xrnwallet."
+    status >= 500 -> "The home server had a problem. Try again later."
+    status != 0 -> "The home server answered $status."
+    else -> "Can't reach the home server. Check the phone is online."
+}
+
+object ServerAddress {
+    fun clean(text: String): String = text.trim().trimEnd('/')
+
+    /** A password never goes out in the clear. [emulator] allows the host machine, for testing. */
+    fun isValid(address: String, emulator: Boolean = false): Boolean =
+        Regex("https://[^/\\s]+\\S*", RegexOption.IGNORE_CASE).matches(address) ||
+            (emulator && Regex("http://10\\.0\\.2\\.2(:\\d+)?(/\\S*)?").matches(address))
+}
+
+/** The same rule as the server's: a plain file name, so a copy can't name a path on this phone. */
+fun isSafePhotoName(name: String): Boolean =
+    Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,99}").matches(name) && ".." !in name
+
+fun sha256(text: String): String =
+    MessageDigest.getInstance("SHA-256").digest(text.toByteArray()).joinToString("") { "%02x".format(it) }
+
+interface SyncServer {
+    fun current(): ServerCopy
+
+    /** The current copy, or null while the server is still on [version]. */
+    fun newerThan(version: Long): ServerCopy?
+
+    /** [base] is a version, or [ANY_VERSION] to replace whatever is there. */
+    fun push(body: String, base: String): PushResult
+    fun earlierCopies(): List<EarlierCopy>
+    fun earlierCopy(id: String): String
+    fun photoNames(): Set<String>
+    fun putPhoto(name: String, file: File)
+
+    /** False when the server has no such photo. */
+    fun getPhoto(name: String, target: File): Boolean
+
+    companion object {
+        const val ANY_VERSION = "*"
+    }
+}
+
+interface SyncedWallet {
+    suspend fun document(): String
+    suspend fun replaceWith(body: String)
+    fun photosIn(body: String): List<String>
+    fun photoFile(name: String): File
+}
+
+interface SyncMetaStore {
+    fun load(): SyncMeta
+    fun save(meta: SyncMeta)
+}
+
+/**
+ * Keeps the phone and the server's copy matching, one whole document at a time.
+ *
+ * The rules that matter: nothing on either side is overwritten unless it is already on the other
+ * side, an upload whose answer was lost isn't mistaken for someone else's write, and when the two
+ * really differ a person chooses, with the side they don't choose filed on the server first.
+ */
+class SyncEngine(
+    private val server: SyncServer,
+    private val wallet: SyncedWallet,
+    private val meta: SyncMetaStore,
+    private val photos: () -> Boolean,
+    private val clock: () -> Long = System::currentTimeMillis,
+) {
+    suspend fun sync(): SyncOutcome {
+        val body = wallet.document()
+        val hash = sha256(body)
+        val state = meta.load()
+        val base = state.version ?: return firstSync(body, hash, state)
+        if (hash != state.hash) return upload(body, hash, state, base.toString())
+        val copy = server.newerThan(base)
+        return when {
+            copy == null -> {
+                meta.save(state.copy(unanswered = emptyList(), syncedAt = clock()))
+                SyncOutcome.UpToDate
+            }
+            // The server lost everything, so it's only owed what this phone has.
+            copy.version == 0L -> upload(body, hash, state, "0")
+            // It went backwards, restored from a backup perhaps. Don't follow it silently.
+            copy.version < base -> SyncOutcome.Conflict(copy.updated)
+            // A change that was then undone here reached the server. The undo is the newer one.
+            copy.hash in state.unanswered ->
+                upload(body, hash, SyncMeta(copy.version, copy.hash), copy.version.toString())
+            else -> download(copy, hash)
+        }
+    }
+
+    /** The side a person chose: this phone's copy replaces the server's, which stays in its history. */
+    suspend fun keepPhone(): SyncOutcome {
+        val body = wallet.document()
+        return upload(body, sha256(body), meta.load(), SyncServer.ANY_VERSION)
+    }
+
+    /**
+     * The side a person chose: the server's copy replaces this phone's. The phone's goes up first,
+     * so the wrong choice costs nothing, then the next sync puts the server's back on top.
+     */
+    suspend fun keepServer(): SyncOutcome {
+        val copy = server.current()
+        if (copy.version == 0L) return sync()
+        if (photos()) fetchPhotos(copy.body)
+        keepPhone()
+        wallet.replaceWith(copy.body)
+        return sync()
+    }
+
+    /** Brings back a copy the server kept. Whatever is here now goes up first, so it stays too. */
+    suspend fun restoreEarlier(id: String): SyncOutcome {
+        val before = sync()
+        if (before is SyncOutcome.Conflict) return before
+        val body = server.earlierCopy(id)
+        if (photos()) fetchPhotos(body)
+        wallet.replaceWith(body)
+        return sync()
+    }
+
+    private suspend fun firstSync(body: String, hash: String, state: SyncMeta): SyncOutcome {
+        val copy = server.current()
+        return when {
+            copy.version == 0L -> upload(body, hash, state, "0")
+            copy.hash == hash -> {
+                meta.save(SyncMeta(copy.version, hash, syncedAt = clock()))
+                SyncOutcome.UpToDate
+            }
+            else -> SyncOutcome.Conflict(copy.updated)
+        }
+    }
+
+    private suspend fun upload(body: String, hash: String, state: SyncMeta, base: String): SyncOutcome {
+        if (photos()) sendPhotos(body)
+        // Saved before sending: the answer can be lost, or the app killed, at any point after this.
+        meta.save(state.copy(unanswered = (state.unanswered + hash).distinct().takeLast(MAX_UNANSWERED)))
+        return when (val answer = server.push(body, base)) {
+            is PushResult.Accepted -> {
+                meta.save(SyncMeta(answer.version, hash, syncedAt = clock()))
+                SyncOutcome.Uploaded
+            }
+            is PushResult.Stale -> {
+                if (answer.hash != hash && answer.hash !in state.unanswered) return SyncOutcome.Conflict(answer.updated)
+                // That's an earlier upload of ours whose answer was lost, so carry on from it.
+                val caughtUp = SyncMeta(answer.version, answer.hash, syncedAt = clock())
+                meta.save(caughtUp)
+                if (answer.hash == hash) SyncOutcome.Uploaded else upload(body, hash, caughtUp, answer.version.toString())
+            }
+        }
+    }
+
+    private suspend fun download(copy: ServerCopy, expected: String): SyncOutcome {
+        // First, so a photo that won't come leaves this phone as it was.
+        if (photos()) fetchPhotos(copy.body)
+        // That can take a while, and a bill added meanwhile must not be overwritten.
+        if (sha256(wallet.document()) != expected) return SyncOutcome.Conflict(copy.updated)
+        wallet.replaceWith(copy.body)
+        meta.save(SyncMeta(copy.version, sha256(wallet.document()), syncedAt = clock()))
+        return SyncOutcome.Downloaded
+    }
+
+    private fun sendPhotos(body: String) {
+        val names = wallet.photosIn(body).filter { wallet.photoFile(it).exists() }
+        if (names.isEmpty()) return
+        val have = server.photoNames()
+        names.filterNot(have::contains).forEach { server.putPhoto(it, wallet.photoFile(it)) }
+    }
+
+    private fun fetchPhotos(body: String) {
+        wallet.photosIn(body).filterNot { wallet.photoFile(it).exists() }
+            .forEach { server.getPhoto(it, wallet.photoFile(it)) }
+    }
+
+    private companion object {
+        const val MAX_UNANSWERED = 20
+    }
+}

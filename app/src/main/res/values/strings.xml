@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">xrnwallet</string>
+    <string name="widget_today_about">Today\'s expenses and income</string>
+    <string name="widget_month_about">This month\'s expenses, income and balance</string>
+    <string name="widget_today_light">Today, Light</string>
+    <string name="widget_today_dark">Today, Dark</string>
+    <string name="widget_today_lime">Today, Lime</string>
+    <string name="widget_month_light">Month, Light</string>
+    <string name="widget_month_dark">Month, Dark</string>
+    <string name="widget_month_lime">Month, Lime</string>
+</resources>

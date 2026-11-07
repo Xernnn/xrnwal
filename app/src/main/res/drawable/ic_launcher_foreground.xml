@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Launcher icon foreground: the wallet, centred in the visible tile. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group android:translateX="18" android:translateY="18"
+        android:scaleX="0.72" android:scaleY="0.72">
+        <group android:translateX="-2.5" android:translateY="-2.5"
+            android:scaleX="1.05" android:scaleY="1.05">
+            <path
+                android:pathData="M31,28 H63 A9,9 0 0 1 72,37 V40 H58 A10,10 0 0 0 58,60 H72 V63 A9,9 0 0 1 63,72 H31 A9,9 0 0 1 22,63 V37 A9,9 0 0 1 31,28 Z"
+                android:fillColor="#FFFFFF" />
+            <path
+                android:pathData="M58,44 H76 A2,2 0 0 1 78,46 V54 A2,2 0 0 1 76,56 H58 A6,6 0 0 1 58,44 Z M59,47.4 A2.6,2.6 0 1 1 59,52.6 A2.6,2.6 0 1 1 59,47.4 Z"
+                android:fillColor="#FFFFFF"
+                android:fillType="evenOdd" />
+        </group>
+    </group>
+</vector>
