@@ -4,6 +4,7 @@ import com.xern.xrnwallet.data.Account
 import com.xern.xrnwallet.data.Bill
 import com.xern.xrnwallet.data.BillCsv
 import com.xern.xrnwallet.data.BillType
+import com.xern.xrnwallet.data.Budget
 import com.xern.xrnwallet.data.CurrencyRate
 import com.xern.xrnwallet.data.Ledger
 import com.xern.xrnwallet.data.Recurring
@@ -29,6 +30,7 @@ import com.xern.xrnwallet.domain.SeparatorStyle
 import com.xern.xrnwallet.domain.WeekendRule
 import com.xern.xrnwallet.ui.Fmt
 import com.xern.xrnwallet.ui.accountLogo
+import com.xern.xrnwallet.ui.firstSteps
 import com.xern.xrnwallet.work.WidgetFigures
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -203,6 +205,19 @@ class DomainTest {
         val today = LocalDate.of(2026, 11, 6)
         val status = Stats.budget(Snapshot(), YearMonth.of(2026, 11), PeriodRules(), today, 80000, true)
         assertEquals(3200L, status.dailyAverageCents)
+    }
+
+    @Test
+    fun firstStepsTickThemselvesOffFromTheData() {
+        val cash = Account(id = 1, name = "Cash", currency = "AUD")
+        val fresh = Snapshot(accounts = listOf(cash))
+        assertEquals(listOf(false, false, false), firstSteps.map { it.done(fresh) })
+        val started = Snapshot(
+            accounts = listOf(cash, Account(id = 2, name = "Bank", currency = "AUD")),
+            bills = listOf(bill(LocalDate.of(2026, 10, 1), 1000)),
+            budgets = listOf(Budget(amountCents = 50000)),
+        )
+        assertEquals(listOf(true, true, true), firstSteps.map { it.done(started) })
     }
 
     @Test

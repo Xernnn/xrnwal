@@ -59,6 +59,7 @@ private val other = listOf(
     Tile("🔤", "Languages", "languages"),
     Tile("📳", "Haptic feedback", "haptics"),
     Tile("🖼️", "App Icons", "appicons"),
+    Tile("👋", "Getting started", "welcome"),
 )
 
 @Composable

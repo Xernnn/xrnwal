@@ -49,6 +49,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.xern.xrnwallet.MainActivity
 import com.xern.xrnwallet.WalletApp
+import kotlinx.coroutines.flow.first
 import java.time.LocalDate
 
 fun NavHostController.addBill(date: LocalDate? = null) = navigate("edit?date=${date?.toEpochDay() ?: NO_DATE}")
@@ -138,12 +139,20 @@ fun WalletRoot(activity: MainActivity) {
             LaunchedEffect(activity.addBillRevision) {
                 if (activity.addBillRevision > 0) nav.addBill()
             }
+            // Waits for the database, so someone updating the app with records already in it never sees this.
+            LaunchedEffect(Unit) {
+                if (settings.welcomeSeen) return@LaunchedEffect
+                val loaded = repo.snapshot.first { it.ledgers.isNotEmpty() }
+                repo.store.update { it.copy(welcomeSeen = true) }
+                if (loaded.bills.isEmpty()) nav.navigate("welcome")
+            }
         }
     }
 }
 
 private fun NavGraphBuilder.routes() {
     composable("main") { MainShell() }
+    composable("welcome") { WelcomeScreen() }
     composable(
         "edit?id={id}&date={date}&type={type}",
         listOf(

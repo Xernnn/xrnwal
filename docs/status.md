@@ -7,6 +7,13 @@ turns out not to be a replacement.
 
 ## Tested and working
 
+- First run: a fresh install opens on the welcome page with only the Cash account and no records, tags
+  or rules. Its five rows open their pages and return, and the ticks follow the data. Updating over an
+  older build with records in it doesn't show the page. Checked in dark, light and 1.3 times text, on
+  an emulator only. The app is portrait only.
+- Double taps: on older builds, two taps under about 75 ms apart recorded a bill twice, and closed Home
+  too, leaving a blank app. Slower than that, the page had already slid out from under the finger.
+  From 19 to 136 ms apart, one bill is now recorded and the page stays. Emulator timings.
 - Bills: add, edit, delete, duplicate, keypad sums, tags, photos, future dates, transfers with fees.
 - Home: ledgers, All ledgers, period picker, card styles, budget card, checklists, Calendar, search.
 - Reports: Week, Month, Year, Custom, filter, category ranking, ranking row into bill list, top bills.

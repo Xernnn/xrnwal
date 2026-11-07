@@ -8,6 +8,19 @@ and workflows are matched, assets are not.
 
 Bottom bar: Home, Reports, centre + button (Add bill), Accounts, Mine.
 
+Touches are ignored while two pages are on screen, so a second tap can't save twice or open a page
+twice.
+
+## Welcome
+
+- Shown once, on a phone with no bills. Someone updating the app with records in it never sees it.
+  Mine, Getting started opens it again.
+- Start here: add a bank or card, add a first bill, set a budget. Each step opens its page and comes
+  back, and is ticked once the data shows it's done.
+- Already have records?: Import from another app (Import Data) and Restore a backup (Data
+  synchronization).
+- Get started closes it.
+
 ## Home
 
 - Top bar: ledger chip, period picker, search, calendar.
@@ -84,7 +97,8 @@ Tags, Checklist.
 **Assistive**: Appearance, Reminders, Password Protection, Exchange Rate, Filter, Data
 synchronization, Export Data, Import Data, Start of Month, Balance Carryover, Preference Settings.
 
-**Other**: Currencies and exchange rates, Languages, Haptic feedback, App Icons, Delete all data.
+**Other**: Currencies and exchange rates, Languages, Haptic feedback, App Icons, Getting started, Delete
+all data.
 
 ### Budget
 

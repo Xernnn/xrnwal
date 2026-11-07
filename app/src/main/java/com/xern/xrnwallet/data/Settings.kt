@@ -46,6 +46,7 @@ data class Settings(
     val includeFuture: Boolean = true,
     val hapticsOn: Boolean = true,
     val gestureTipSeen: Boolean = false,
+    val welcomeSeen: Boolean = false,
     val hapticStrength: Int = 1,
     val hideAmounts: Boolean = false,
     val pinHash: String? = null,
