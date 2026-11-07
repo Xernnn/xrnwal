@@ -193,7 +193,7 @@ fun EarlierCopiesScreen() {
                 val status = sync.status.value
                 val done = status.error == null && status.conflict == null
                 Toast.makeText(context, if (done) "Copy restored" else status.error ?: "Sort out the sync first", Toast.LENGTH_LONG).show()
-                if (done) nav.popBackStack()
+                if (done) nav.leavePage()
             }
         }
     }

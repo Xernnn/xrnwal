@@ -177,7 +177,7 @@ fun ReminderEditScreen(id: Long) {
             if (existing != null) {
                 IconButton({
                     repo.deleteReminder(existing)
-                    nav.popBackStack()
+                    nav.leavePage()
                 }) { Icon(Icons.Filled.Delete, "Delete reminder", tint = Color(0xFFFF3B30)) }
             }
         },
@@ -205,7 +205,7 @@ fun ReminderEditScreen(id: Long) {
                 }
                 val base = existing ?: Reminder(name = name)
                 repo.saveReminder(base.copy(name = name.trim(), minuteOfDay = minute, repeat = repeat, title = title, body = body))
-                nav.popBackStack()
+                nav.leavePage()
             }
         }
     }

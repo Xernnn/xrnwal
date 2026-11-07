@@ -1,5 +1,6 @@
 package com.xern.xrnwallet.ui
 
+import android.os.SystemClock
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInHorizontally
@@ -29,6 +30,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -54,6 +57,30 @@ fun NavHostController.openBill(id: Long) = navigate("bill/$id")
 const val NO_DATE = Long.MIN_VALUE
 
 private val pageSlide = tween<IntOffset>(260, easing = FastOutSlowInEasing)
+
+/** Far longer than any slide, so a stuck animation can't leave the app ignoring touches. */
+private const val SLIDE_LIMIT_MILLIS = 1_500L
+
+/**
+ * Drops touches while two pages are on screen. One landing then hits a page on its way in or out, so a
+ * second tap on Save would write twice, and a second tap on a tile would open its page twice. It checks
+ * on each touch instead of covering the screen, because a cover only appears on the next frame.
+ */
+private fun Modifier.ignoreTouchesDuringSlides(nav: NavHostController) = pointerInput(nav) {
+    var slidingSince = 0L
+    awaitPointerEventScope {
+        while (true) {
+            val event = awaitPointerEvent(PointerEventPass.Initial)
+            if (nav.visibleEntries.value.size > 1) {
+                val now = SystemClock.uptimeMillis()
+                if (slidingSince == 0L) slidingSince = now
+                if (now - slidingSince < SLIDE_LIMIT_MILLIS) event.changes.forEach { it.consume() }
+            } else {
+                slidingSince = 0L
+            }
+        }
+    }
+}
 
 private fun NavGraphBuilder.idRoute(route: String, content: @Composable (Long) -> Unit) =
     composable("$route/{id}", listOf(navArgument("id") { type = NavType.LongType })) {
@@ -94,6 +121,7 @@ fun WalletRoot(activity: MainActivity) {
                     NavHost(
                         navController = nav,
                         startDestination = "main",
+                        modifier = Modifier.ignoreTouchesDuringSlides(nav),
                         // Both pages move together, side by side, so opening one reads as turning to it.
                         enterTransition = { slideInHorizontally(pageSlide) { it } },
                         exitTransition = { slideOutHorizontally(pageSlide) { -it } },

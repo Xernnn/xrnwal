@@ -72,6 +72,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.zIndex
+import androidx.navigation.NavHostController
 import com.xern.xrnwallet.data.Bill
 import com.xern.xrnwallet.data.BillType
 import com.xern.xrnwallet.data.Repository
@@ -84,6 +85,14 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 val CardShape = RoundedCornerShape(18.dp)
+
+/**
+ * Closes the current page. A second tap lands while the page is still sliding away, and must not close
+ * Home as well, which would leave a blank app with no way back.
+ */
+fun NavHostController.leavePage() {
+    if (previousBackStackEntry != null) popBackStack()
+}
 
 @Composable
 fun Page(
@@ -100,7 +109,7 @@ fun Page(
             .background(MaterialTheme.colorScheme.background)
             .statusBarsPadding(),
     ) {
-        TopBar(title, onBack ?: { nav.popBackStack(); Unit }, actions)
+        TopBar(title, onBack ?: { nav.leavePage() }, actions)
         content()
     }
 }

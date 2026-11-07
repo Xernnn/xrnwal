@@ -195,7 +195,7 @@ fun AccountDetailScreen(id: Long) {
             confirm = false
             repo.deleteAccount(account)
             Toast.makeText(context, "Account deleted", Toast.LENGTH_SHORT).show()
-            nav.popBackStack()
+            nav.leavePage()
         }
     }
 }
@@ -257,7 +257,7 @@ fun AccountEditScreen(id: Long) {
 
     Page(
         if (existing == null) "Add account" else "Edit account",
-        onBack = { if (existing == null) choosing = true else nav.popBackStack() },
+        onBack = { if (existing == null) choosing = true else nav.leavePage() },
     ) {
         ScrollBody {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -294,7 +294,7 @@ fun AccountEditScreen(id: Long) {
                         ),
                     )
                 }
-                nav.popBackStack()
+                nav.leavePage()
             }
         }
     }

@@ -179,7 +179,11 @@ fun BillEditScreen(id: Long, date: Long, initialType: Int) {
 
     fun toast(text: String) = Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
 
+    // The page closes only after the write, so a second tap can arrive first and record the bill twice.
+    var saving by remember { mutableStateOf(false) }
+
     fun save() {
+        if (saving) return
         val cents = Calculator.evaluate(amount)?.let(Money::toCents)
         if (cents == null || cents <= 0) {
             toast("Please enter the amount")
@@ -213,9 +217,10 @@ fun BillEditScreen(id: Long, date: Long, initialType: Int) {
             inBudget = existing?.inBudget ?: true,
             recurringId = existing?.recurringId,
         )
+        saving = true
         scope.launch {
             repo.saveBill(bill, tagIds)
-            nav.popBackStack()
+            nav.leavePage()
         }
     }
 
@@ -227,7 +232,7 @@ fun BillEditScreen(id: Long, date: Long, initialType: Int) {
             .imePadding(),
     ) {
         Row(Modifier.fillMaxWidth().height(60.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton({ nav.popBackStack() }) { Icon(Icons.Filled.Close, "Close") }
+            IconButton({ nav.leavePage() }) { Icon(Icons.Filled.Close, "Close") }
             Spacer(Modifier.weight(1f))
             Text(
                 s.ledgerById[ledgerId]?.name ?: "No ledger",
@@ -790,7 +795,7 @@ fun BillDetailScreen(id: Long) {
                 Spacer(Modifier.weight(1f))
                 IconButton({
                     undo.delete(bill, s.tagIdsOf(bill.id))
-                    nav.popBackStack()
+                    nav.leavePage()
                 }) { Icon(Icons.Filled.Delete, "Delete", tint = Color(0xFFFF3B30)) }
                 IconButton({ nav.navigate("edit?id=${bill.id}") }) { Icon(Icons.Filled.Edit, "Edit") }
             }

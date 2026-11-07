@@ -336,7 +336,7 @@ fun SavingsEditScreen(typeName: String) {
                         ),
                     )
                 }
-                nav.popBackStack()
+                nav.leavePage()
             }
         }
     }
@@ -476,7 +476,7 @@ fun SavingsDetailScreen(id: Long) {
         ConfirmDialog("Delete ${plan.name}?", note, onDismiss = { confirm = false }) {
             confirm = false
             repo.deletePlan(plan)
-            nav.popBackStack()
+            nav.leavePage()
         }
     }
 }
@@ -578,7 +578,7 @@ fun RecurringDetailScreen(id: Long) {
         ) {
             confirm = false
             repo.save { delete(rule) }
-            nav.popBackStack()
+            nav.leavePage()
         }
     }
 }
@@ -651,13 +651,18 @@ fun RecurringEditScreen(id: Long) {
     fun firstOpenStep(rule: Recurring): Int =
         if (existing == null || existing.start != rule.start || existing.rule != rule.rule) 0 else existing.generated
 
+    // The page closes only after the write, so a second tap can arrive first and add the rule twice.
+    var saving by remember { mutableStateOf(false) }
+
     fun commit(rule: Recurring, recorded: List<Bill> = emptyList(), missing: List<LocalDate> = emptyList()) {
+        if (saving) return
+        saving = true
         scope.launch {
             val id = repo.dao.put(rule)
             if (recorded.isNotEmpty()) repo.dao.linkBills(id, recorded.map { it.id })
             if (missing.isNotEmpty()) repo.recordDates(rule.copy(id = id), missing)
             repo.runRecurring()
-            nav.popBackStack()
+            nav.leavePage()
         }
     }
 

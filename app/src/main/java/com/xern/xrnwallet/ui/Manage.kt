@@ -117,7 +117,7 @@ fun LedgerEditScreen(id: Long) {
                 }
                 val base = existing ?: Ledger(name = name, sort = s.ledgers.size)
                 repo.save { put(base.copy(name = name.trim(), cover = cover, currency = currency)) }
-                nav.popBackStack()
+                nav.leavePage()
             }
         }
     }
@@ -171,7 +171,7 @@ fun LedgerDetailScreen(id: Long) {
         ) {
             confirm = false
             repo.deleteLedger(ledger)
-            nav.popBackStack()
+            nav.leavePage()
         }
     }
 }
@@ -363,7 +363,7 @@ fun CategoryEditScreen(id: Long, type: Int, parent: Long?) {
                 val chosenType = if (!creatingTop) type else if (incomeTab == 1) BillType.INCOME else BillType.EXPENSE
                 val base = existing ?: Category(type = chosenType, name = name, icon = icon, parentId = parent, sort = s.categories.size)
                 repo.save { put(base.copy(name = name.trim(), icon = icon)) }
-                nav.popBackStack()
+                nav.leavePage()
             }) { Icon(Icons.Filled.Check, "Save") }
         },
     ) {
@@ -395,7 +395,7 @@ fun CategoryEditScreen(id: Long, type: Int, parent: Long?) {
                     deleteCategoryBudget(existing.id)
                     deleteCategory(existing.id)
                 }
-                nav.popBackStack()
+                nav.leavePage()
             }
         }
     }
@@ -577,7 +577,7 @@ fun ChecklistDetailScreen(id: Long) {
         ConfirmDialog("Delete ${list.name}?", "Its items go with it.", onDismiss = { confirm = false }) {
             confirm = false
             repo.deleteChecklist(list)
-            nav.popBackStack()
+            nav.leavePage()
         }
     }
 }
