@@ -43,8 +43,8 @@ turns out not to be a replacement.
 Biometric unlock has not been tested, because the emulator has no enrolled fingerprint.
 
 Sync was tested from the emulator to the real server program running on the computer, over plain
-HTTP. The server is now installed on the home server and answers over HTTPS, but the app has not yet
-connected to it there.
+HTTP. The phone has also synced to the home server over HTTPS since 2026-11-06, and the server's log
+shows every upload accepted. Restoring a phone from that server copy hasn't been tried.
 
 - Paging, on the release build on an emulator with animations on: a page following a slow drag, flicks
   over bills both ways deleting nothing, arrows adding up on quick presses, picker jumps, weeks, Reports,
@@ -134,8 +134,7 @@ the Friday before and the Monday after, without changing the setting to confirm 
   to identify the owner's own accounts, so check each brand's terms before publishing a build.
 - On gesture navigation a right swipe from the very edge of the screen is the system's Back, which
   leaves the app from Home.
-- Connecting the app to the real home server from the real phone. Sync has only run over plain
-  HTTP from the emulator so far.
+- Restoring a real phone from the home server.
 
 ## Importing from the reference app
 
