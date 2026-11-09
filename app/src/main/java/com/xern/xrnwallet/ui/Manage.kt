@@ -164,9 +164,15 @@ fun LedgerDetailScreen(id: Long) {
         }
     }
     if (confirm) {
+        val rules = s.recurring.count { it.ledgerId == id }
+        val alsoRules = when (rules) {
+            0 -> ""
+            1 -> ", and the recurring item that records into it,"
+            else -> ", and the $rules recurring items that record into it,"
+        }
         ConfirmDialog(
             "Delete ${ledger.name}?",
-            "All ${bills.size} bills in this ledger will be deleted too. This cannot be undone.",
+            "All ${bills.size} bills in this ledger$alsoRules will be deleted too. This cannot be undone.",
             onDismiss = { confirm = false },
         ) {
             confirm = false

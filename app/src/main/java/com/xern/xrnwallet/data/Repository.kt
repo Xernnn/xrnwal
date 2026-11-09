@@ -132,10 +132,12 @@ class Repository(
 
     fun save(block: suspend AppDao.() -> Unit) = launchIo { dao.block() }
 
+    /** Its recurring items go too, as they would only ever record into a ledger that isn't there. */
     fun deleteLedger(ledger: Ledger) = launchIo {
         db.withTransaction {
             dao.deleteBillTagsOfLedger(ledger.id)
             dao.deleteBillsOfLedger(ledger.id)
+            dao.deleteRecurringOfLedger(ledger.id)
             dao.delete(ledger)
         }
         store.update { if (it.activeLedger == ledger.id) it.copy(activeLedger = ALL_LEDGERS) else it }
@@ -186,16 +188,11 @@ class Repository(
     suspend fun runRecurring(now: LocalDateTime = LocalDateTime.now()) {
         db.withTransaction {
             val knownTags = dao.tagsNow().map { it.id }.toSet()
+            val ledgers = dao.ledgersNow().mapTo(HashSet()) { it.id }
             dao.recurringNow().forEach { rule ->
-                var made = rule.generated
-                while (rule.times == 0 || made < rule.times) {
-                    val at = rule.rule.occurrence(rule.start, made)
-                        .atTime(rule.minuteOfDay / 60, rule.minuteOfDay % 60)
-                    if (at.isAfter(now)) break
-                    addRuleBill(rule, at, knownTags)
-                    made++
-                }
-                if (made != rule.generated) dao.put(rule.copy(generated = made))
+                val due = rule.due(now, ledgers)
+                due.forEach { addRuleBill(rule, it, knownTags) }
+                if (due.isNotEmpty()) dao.put(rule.copy(generated = rule.generated + due.size))
             }
         }
     }

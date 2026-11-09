@@ -484,6 +484,28 @@ class DomainTest {
     }
 
     @Test
+    fun aRuleRecordsWhatIsDueButNothingOnceItsLedgerIsGone() {
+        // 2026-11-01 is a Sunday.
+        val weekly = Recurring(
+            ledgerId = 2,
+            type = BillType.EXPENSE,
+            amountCents = 5000,
+            currency = "AUD",
+            startEpochDay = LocalDate.of(2026, 11, 1).toEpochDay(),
+            repeatKind = RepeatKind.WEEKLY.name,
+            repeatValue = 7,
+            times = 0,
+        )
+        val now = LocalDate.of(2026, 11, 16).atTime(9, 0)
+        val sundays = listOf(1, 8, 15).map { LocalDate.of(2026, 11, it).atTime(8, 0) }
+        assertEquals(sundays, weekly.due(now, setOf(1L, 2L)))
+        assertEquals(sundays.drop(1), weekly.copy(generated = 1).due(now, setOf(2L)))
+        assertEquals(sundays.take(2), weekly.copy(times = 2).due(now, setOf(2L)))
+        // Its ledger was deleted: bills there would count in every total but show in no ledger.
+        assertEquals(emptyList<java.time.LocalDateTime>(), weekly.due(now, setOf(1L)))
+    }
+
+    @Test
     fun aRuleFindsBillsAlreadyRecordedForItsDates() {
         val rule = Recurring(
             ledgerId = 1,
