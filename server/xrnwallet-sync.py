@@ -25,6 +25,14 @@ only, plus `bcrypt` to read an htpasswd file, so the calendar password is the sy
 is lost the phone is left a version behind what it sent, and its next write gets a 412. Comparing
 this hash with what it tried to send tells that apart from someone else having written here.
 
+They also carry X-Tag, a name each write gets at random, and every copy keeps the tags of the ones
+it was written on top of. A version number alone can't tell copies apart: once the data here is
+restored from a backup and written to again, the same numbers come back for different copies. So a
+phone sends the tag of the copy it last saw as X-Base-Tag, beside If-None-Match or If-Match, and
+then a 304 or a write needs that same copy, and a 200 says in X-Follows (1 or 0) whether its copy
+was written on top of the phone's. Without a tag on either side, as from an older app or a copy
+from before tags, the number decides alone. The ETag stays a bare number for those older apps.
+
 Every write keeps the copy it replaces: the last KEEP_VERSIONS of them in history/, and the first
 of each day in daily/ for KEEP_DAYS. A photo goes once none of those name it any more.
 
@@ -36,6 +44,7 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import shutil
 import sys
 import threading
@@ -51,6 +60,7 @@ FAIL_LIMIT = 10  # wrong logins from one address within FAIL_WINDOW_S, then 429 
 FAIL_WINDOW_S = 15 * 60
 KEEP_VERSIONS = 20
 KEEP_DAYS = 60
+KEEP_TAGS = 1000  # a phone this many writes behind is asked, as it can't be told it's on the same line
 PRUNE_EVERY_S = 600  # photos are swept at most this often per user
 PHOTO_GRACE_S = 86400  # a photo this new stays even if nothing names it yet
 PREFIX = "/xrnwallet"
@@ -272,7 +282,18 @@ def doc_headers(doc):
         "ETag": f'"{doc["version"]}"',
         "X-Content-SHA256": doc.get("sha256", ""),
         "X-Updated": doc.get("updated", ""),
+        "X-Tag": doc.get("tag", ""),
     }
+
+
+def same_copy(doc, tag):
+    """Whether the copy a phone names by its X-Base-Tag is this one, as far as the tags can tell."""
+    here = doc.get("tag", "")
+    return not tag or not here or tag == here
+
+
+def base_tag(handler):
+    return (handler.headers.get("X-Base-Tag") or "").strip()
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -385,8 +406,12 @@ class Handler(BaseHTTPRequestHandler):
         with lock:
             doc = read_state(user)
         headers = doc_headers(doc)
-        if etag_version(self.headers.get("If-None-Match")) == str(doc["version"]):
+        tag = base_tag(self)
+        if etag_version(self.headers.get("If-None-Match")) == str(doc["version"]) and same_copy(doc, tag):
             return self.send(304, headers=headers)
+        if tag and doc.get("tag"):
+            # Whether the phone can take this as newer than its own, or must ask first.
+            headers["X-Follows"] = "1" if tag == doc["tag"] or tag in doc.get("trail", ()) else "0"
         body = json.dumps(doc.get("data") or {}, ensure_ascii=False, separators=(",", ":"))
         self.send(200, body, "application/json; charset=utf-8", headers)
 
@@ -414,11 +439,14 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(428, "If-Match required")
         with lock:
             cur = read_state(user)
-            if want != "*" and etag_version(want) != str(cur["version"]):
+            stale = etag_version(want) != str(cur["version"]) or not same_copy(cur, base_tag(self))
+            if want != "*" and stale:
                 return self.send(412, "changed since you read it", headers=doc_headers(cur))
             keep_old(user, cur)
             doc = {
                 "version": cur["version"] + 1,
+                "tag": secrets.token_hex(8),
+                "trail": [t for t in cur.get("trail", []) + [cur.get("tag", "")] if t][-KEEP_TAGS:],
                 "updated": datetime.now(timezone.utc).isoformat(),
                 "by": (self.headers.get("X-Device") or "")[:64],
                 "sha256": hashlib.sha256(raw).hexdigest(),

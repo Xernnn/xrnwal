@@ -11,15 +11,28 @@ data class SyncMeta(
     /** Uploads sent whose answer never came. Any of them may be what the server now holds. */
     val unanswered: List<String> = emptyList(),
     val syncedAt: Long = 0,
+    /**
+     * The server's own name for that copy, new with every write. A version number comes back after the
+     * server's data is restored from a backup, naming another copy. Empty from a server too old to say.
+     */
+    val tag: String = "",
 )
 
-data class ServerCopy(val version: Long, val hash: String, val body: String, val updated: String)
+/** [follows] is false when the server says this isn't the copy this phone matched, or one written on top of it. */
+data class ServerCopy(
+    val version: Long,
+    val hash: String,
+    val body: String,
+    val updated: String,
+    val tag: String = "",
+    val follows: Boolean = true,
+)
 
 sealed interface PushResult {
-    data class Accepted(val version: Long) : PushResult
+    data class Accepted(val version: Long, val tag: String = "") : PushResult
 
     /** Someone wrote since the version this upload was based on. Nothing changed on the server. */
-    data class Stale(val version: Long, val hash: String, val updated: String) : PushResult
+    data class Stale(val version: Long, val hash: String, val updated: String, val tag: String = "") : PushResult
 }
 
 @Serializable
@@ -67,11 +80,14 @@ fun sha256(text: String): String =
 interface SyncServer {
     fun current(): ServerCopy
 
-    /** The current copy, or null while the server is still on [version]. */
-    fun newerThan(version: Long): ServerCopy?
+    /** The current copy, or null while the server is still on [version], the copy [tag] names when not empty. */
+    fun newerThan(version: Long, tag: String): ServerCopy?
 
-    /** [base] is a version, or [ANY_VERSION] to replace whatever is there. */
-    fun push(body: String, base: String): PushResult
+    /**
+     * [base] is a version, or [ANY_VERSION] to replace whatever is there. When not empty, [tag] must
+     * name the copy at [base] too.
+     */
+    fun push(body: String, base: String, tag: String): PushResult
     fun earlierCopies(): List<EarlierCopy>
     fun earlierCopy(id: String): String
     fun photoNames(): Set<String>
@@ -123,7 +139,7 @@ class SyncEngine(
         val state = meta.load()
         val base = state.version ?: return firstSync(body, hash, state)
         if (hash != state.hash) return upload(body, hash, state, base.toString())
-        val copy = server.newerThan(base)
+        val copy = server.newerThan(base, state.tag)
         return when {
             copy == null -> {
                 meta.save(state.copy(unanswered = emptyList(), syncedAt = clock()))
@@ -135,7 +151,10 @@ class SyncEngine(
             copy.version < base -> SyncOutcome.Conflict(copy.updated)
             // A change that was then undone here reached the server. The undo is the newer one.
             copy.hash in state.unanswered ->
-                upload(body, hash, SyncMeta(copy.version, copy.hash), copy.version.toString())
+                upload(body, hash, SyncMeta(copy.version, copy.hash, tag = copy.tag), copy.version.toString())
+            // It went backwards and was written to again, so its numbers may have caught up with this
+            // phone's. What this phone matched may now be only here.
+            !copy.follows -> SyncOutcome.Conflict(copy.updated)
             else -> download(copy, hash)
         }
     }
@@ -189,7 +208,7 @@ class SyncEngine(
         return when {
             copy.version == 0L -> upload(body, hash, state, "0")
             copy.hash == hash -> {
-                meta.save(SyncMeta(copy.version, hash, syncedAt = clock()))
+                meta.save(SyncMeta(copy.version, hash, syncedAt = clock(), tag = copy.tag))
                 SyncOutcome.UpToDate
             }
             else -> SyncOutcome.Conflict(copy.updated)
@@ -200,15 +219,15 @@ class SyncEngine(
         if (photos()) sendPhotos(body)
         // Saved before sending: the answer can be lost, or the app killed, at any point after this.
         meta.save(state.copy(unanswered = (state.unanswered + hash).distinct().takeLast(MAX_UNANSWERED)))
-        return when (val answer = server.push(body, base)) {
+        return when (val answer = server.push(body, base, state.tag)) {
             is PushResult.Accepted -> {
-                meta.save(SyncMeta(answer.version, hash, syncedAt = clock()))
+                meta.save(SyncMeta(answer.version, hash, syncedAt = clock(), tag = answer.tag))
                 SyncOutcome.Uploaded
             }
             is PushResult.Stale -> {
                 if (answer.hash != hash && answer.hash !in state.unanswered) return SyncOutcome.Conflict(answer.updated)
                 // That's an earlier upload of ours whose answer was lost, so carry on from it.
-                val caughtUp = SyncMeta(answer.version, answer.hash, syncedAt = clock())
+                val caughtUp = SyncMeta(answer.version, answer.hash, syncedAt = clock(), tag = answer.tag)
                 meta.save(caughtUp)
                 if (answer.hash == hash) SyncOutcome.Uploaded else upload(body, hash, caughtUp, answer.version.toString())
             }
@@ -220,7 +239,7 @@ class SyncEngine(
         if (photos()) fetchPhotos(copy.body)
         // That can take a while, and a bill added meanwhile must not be overwritten.
         val now = wallet.replaceWith(copy.body, expected) ?: return SyncOutcome.Conflict(copy.updated)
-        meta.save(SyncMeta(copy.version, now, syncedAt = clock()))
+        meta.save(SyncMeta(copy.version, now, syncedAt = clock(), tag = copy.tag))
         return SyncOutcome.Downloaded
     }
 

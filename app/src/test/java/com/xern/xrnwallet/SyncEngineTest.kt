@@ -31,6 +31,14 @@ private class FakeServer : SyncServer {
 
     var version = 0L
     var body = ""
+
+    /** This copy's tag, new with every write, and the tags of the copies it was written on top of. */
+    var tag = ""
+    var trail = listOf<String>()
+
+    /** Off for a server from before tags, which goes by version numbers alone. */
+    var tagged = true
+    private var tags = 0
     val history = mutableListOf<Kept>()
     val photos = mutableMapOf<String, ByteArray>()
     var writes = 0
@@ -40,12 +48,32 @@ private class FakeServer : SyncServer {
 
     fun write(text: String) {
         if (version > 0) history += Kept(version, body)
+        trail = if (version == 0L) emptyList() else (trail + tag).filter { it.isNotEmpty() }
         version++
         body = text
+        tag = if (tagged) "tag${++tags}" else ""
         writes++
     }
 
-    private fun copy() = ServerCopy(version, if (version == 0L) "" else sha256(body), body, "2026-11-06T00:00:00+00:00")
+    /** What restoring the server's data from a backup puts back. */
+    data class Saved(val version: Long, val body: String, val tag: String, val trail: List<String>)
+
+    fun saved() = Saved(version, body, tag, trail)
+
+    fun restore(saved: Saved) {
+        version = saved.version
+        body = saved.body
+        tag = saved.tag
+        trail = saved.trail
+    }
+
+    private fun here() = if (version == 0L) "" else tag
+
+    /** A phone's tag only counts when both sides have one. */
+    private fun sameCopy(tag: String) = tag.isEmpty() || here().isEmpty() || tag == here()
+
+    private fun copy(follows: Boolean = true) =
+        ServerCopy(version, if (version == 0L) "" else sha256(body), body, "2026-11-06T00:00:00+00:00", here(), follows)
 
     private fun reach() {
         if (unreachable) throw ServerFailure(0)
@@ -56,22 +84,23 @@ private class FakeServer : SyncServer {
         return copy()
     }
 
-    override fun newerThan(version: Long): ServerCopy? {
+    override fun newerThan(version: Long, tag: String): ServerCopy? {
         reach()
-        return if (version == this.version) null else copy()
+        if (version == this.version && sameCopy(tag)) return null
+        return copy(follows = sameCopy(tag) || tag in trail)
     }
 
-    override fun push(body: String, base: String): PushResult {
+    override fun push(body: String, base: String, tag: String): PushResult {
         reach()
-        if (base != SyncServer.ANY_VERSION && base != version.toString()) {
-            return PushResult.Stale(version, sha256(this.body), "2026-11-06T00:00:00+00:00")
+        if (base != SyncServer.ANY_VERSION && (base != version.toString() || !sameCopy(tag))) {
+            return PushResult.Stale(version, sha256(this.body), "2026-11-06T00:00:00+00:00", here())
         }
         write(body)
         if (loseNextAnswer) {
             loseNextAnswer = false
             throw ServerFailure(0)
         }
-        return PushResult.Accepted(version)
+        return PushResult.Accepted(version, here())
     }
 
     override fun earlierCopies() = history.map { EarlierCopy(it.version.toString(), it.version, "") }
@@ -264,6 +293,56 @@ class SyncEngineTest {
         assertEquals("second", wallet.content)
     }
 
+    @Test fun aServerRestoredAndWrittenBackUpToThisPhonesVersionIsNotTakenForItsCopy() {
+        synced()
+        val backup = server.saved()
+        wallet.content = "lunch"
+        synced()
+        server.restore(backup)
+        otherPhoneWrites("the other phone's dinner")
+        // Version 2 again, but not the version 2 this phone matched.
+        assertConflict(sync())
+        assertEquals("lunch", wallet.content)
+        assertEquals("the other phone's dinner", server.body)
+    }
+
+    @Test fun aChangeHereDoesNotOverwriteWhatWasWrittenSinceTheServerWasRestored() {
+        synced()
+        val backup = server.saved()
+        wallet.content = "lunch"
+        synced()
+        server.restore(backup)
+        otherPhoneWrites("the other phone's dinner")
+        wallet.content = "lunch and a coffee"
+        assertConflict(sync())
+        assertEquals("the other phone's dinner", server.body)
+    }
+
+    @Test fun aServerRestoredAndWrittenPastThisPhonesVersionIsNotFollowedSilently() {
+        synced()
+        val backup = server.saved()
+        wallet.content = "lunch"
+        synced()
+        server.restore(backup)
+        otherPhoneWrites("the other phone's dinner")
+        otherPhoneWrites("the other phone's breakfast")
+        // Only this phone still has lunch, which the restore took off the server.
+        assertConflict(sync())
+        assertEquals("lunch", wallet.content)
+    }
+
+    @Test fun aServerFromBeforeTagsStillSyncsByVersion() {
+        server.tagged = false
+        synced()
+        otherPhoneWrites("from the other phone")
+        assertEquals(SyncOutcome.Downloaded, sync())
+        wallet.content = "and back"
+        assertEquals(SyncOutcome.Uploaded, sync())
+        assertEquals("and back", server.body)
+        assertEquals(SyncOutcome.UpToDate, sync())
+        assertEquals("", meta.meta.tag)
+    }
+
     @Test fun aWipedServerIsFilledAgain() {
         synced()
         server.version = 0
@@ -328,7 +407,7 @@ class SyncEngineTest {
         val outcome = runCatching {
             // Reachable for the read, then gone for the upload.
             object : SyncServer by server {
-                override fun push(body: String, base: String): PushResult = throw ServerFailure(0)
+                override fun push(body: String, base: String, tag: String): PushResult = throw ServerFailure(0)
             }.let { SyncEngine(it, wallet, meta, { false }).keepServer() }
         }
         assertTrue(outcome.isFailure)

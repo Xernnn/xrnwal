@@ -63,16 +63,22 @@ class HomeServer(private val login: ServerLogin, private val device: String) : S
     private fun HttpURLConnection.hash(): String = getHeaderField("X-Content-SHA256").orEmpty()
     private fun HttpURLConnection.updated(): String = getHeaderField("X-Updated").orEmpty()
 
-    private fun HttpURLConnection.copy() = ServerCopy(version(), hash(), text(), updated())
+    // Beside the ETag rather than in it, so a phone and a server a version apart still understand each other.
+    private fun HttpURLConnection.tag(): String = getHeaderField("X-Tag").orEmpty()
+    private fun HttpURLConnection.follows(): Boolean = getHeaderField("X-Follows") != "0"
+
+    private fun HttpURLConnection.copy() = ServerCopy(version(), hash(), text(), updated(), tag(), follows())
 
     private fun failed(connection: HttpURLConnection): Nothing = throw ServerFailure(connection.responseCode)
+
+    private fun baseTag(tag: String) = if (tag.isEmpty()) emptyMap() else mapOf("X-Base-Tag" to tag)
 
     override fun current(): ServerCopy = request("/state") {
         if (it.responseCode == 200) it.copy() else failed(it)
     }
 
-    override fun newerThan(version: Long): ServerCopy? =
-        request("/state", headers = mapOf("If-None-Match" to "\"$version\"")) {
+    override fun newerThan(version: Long, tag: String): ServerCopy? =
+        request("/state", headers = mapOf("If-None-Match" to "\"$version\"") + baseTag(tag)) {
             when (it.responseCode) {
                 200 -> it.copy()
                 304 -> null
@@ -80,14 +86,15 @@ class HomeServer(private val login: ServerLogin, private val device: String) : S
             }
         }
 
-    override fun push(body: String, base: String): PushResult {
+    override fun push(body: String, base: String, tag: String): PushResult {
         val ifMatch = if (base == SyncServer.ANY_VERSION) base else "\"$base\""
-        val headers = mapOf("If-Match" to ifMatch, "Content-Type" to "application/json; charset=utf-8")
+        val headers = mapOf("If-Match" to ifMatch, "Content-Type" to "application/json; charset=utf-8") +
+            if (base == SyncServer.ANY_VERSION) emptyMap() else baseTag(tag)
         return request("/state", "PUT", headers) {
             it.send(body.toByteArray())
             when (it.responseCode) {
-                200 -> PushResult.Accepted(it.version())
-                412 -> PushResult.Stale(it.version(), it.hash(), it.updated())
+                200 -> PushResult.Accepted(it.version(), it.tag())
+                412 -> PushResult.Stale(it.version(), it.hash(), it.updated(), it.tag())
                 else -> failed(it)
             }
         }
@@ -178,6 +185,7 @@ class SyncStore(context: Context) : SyncMetaStore {
         hash = prefs.getString(HASH, null),
         unanswered = prefs.getString(UNANSWERED, null)?.split(",").orEmpty(),
         syncedAt = prefs.getLong(SYNCED_AT, 0),
+        tag = prefs.getString(TAG, null).orEmpty(),
     )
 
     // commit, not apply: this has to be on disk before the upload it describes leaves the phone.
@@ -187,6 +195,7 @@ class SyncStore(context: Context) : SyncMetaStore {
         edit.putString(HASH, meta.hash)
         edit.putString(UNANSWERED, meta.unanswered.joinToString(",").ifEmpty { null })
         edit.putLong(SYNCED_AT, meta.syncedAt)
+        edit.putString(TAG, meta.tag.ifEmpty { null })
         edit.commit()
     }
 
@@ -200,6 +209,7 @@ class SyncStore(context: Context) : SyncMetaStore {
         const val HASH = "hash"
         const val UNANSWERED = "unanswered"
         const val SYNCED_AT = "syncedAt"
+        const val TAG = "tag"
     }
 }
 

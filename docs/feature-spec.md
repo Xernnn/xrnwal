@@ -279,6 +279,7 @@ otherwise:
 | This phone was restored from a file, or had all its data deleted | It asks which to keep, as a new phone does |
 | Both sides changed | It asks which to keep |
 | The server went backwards, restored from a backup say | It asks which to keep |
+| The server went backwards and was written to again, to this phone's version or past it | It asks which to keep, as each copy has a tag of its own |
 | An upload arrived but its answer was lost | It recognises its own upload by hash and carries on |
 | The server lost everything | It sends this phone's copy again |
 | A bill is added while a copy is downloading | It asks which to keep, and the bill stays |
