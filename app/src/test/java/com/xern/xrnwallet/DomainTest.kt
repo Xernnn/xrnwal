@@ -28,6 +28,7 @@ import com.xern.xrnwallet.domain.RepeatUnit
 import com.xern.xrnwallet.domain.Savings
 import com.xern.xrnwallet.domain.SeparatorStyle
 import com.xern.xrnwallet.domain.WeekendRule
+import com.xern.xrnwallet.ui.AppUi
 import com.xern.xrnwallet.ui.Fmt
 import com.xern.xrnwallet.ui.accountLogo
 import com.xern.xrnwallet.ui.firstSteps
@@ -173,6 +174,14 @@ class DomainTest {
                 date = date.plusDays(1)
             }
         }
+    }
+
+    @Test
+    fun homeAndReportsOpenOnTheAccountingMonthOfToday() {
+        // With Start of Month 15, November 9 is still in October's month, as the widget and Budget say.
+        val ui = AppUi(LocalDate.of(2026, 11, 9), PeriodRules(startDay = 15))
+        assertEquals(Period.Month(YearMonth.of(2026, 10)), ui.homePeriod)
+        assertEquals(Period.Month(YearMonth.of(2026, 10)), ui.reportPeriod)
     }
 
     @Test

@@ -37,18 +37,21 @@ import com.xern.xrnwallet.data.Settings
 import com.xern.xrnwallet.data.Snapshot
 import com.xern.xrnwallet.domain.Currencies
 import com.xern.xrnwallet.domain.Period
+import com.xern.xrnwallet.domain.PeriodRules
 import java.time.LocalDate
-import java.time.YearMonth
 
 val LocalRepo = staticCompositionLocalOf<Repository> { error("No repository") }
 val LocalNav = staticCompositionLocalOf<NavHostController> { error("No navigation") }
 val LocalAppUi = staticCompositionLocalOf<AppUi> { error("No app state") }
 
-/** State that outlives a single screen: the periods chosen on Home and Reports. */
-class AppUi(today: LocalDate) {
+/**
+ * State that outlives a single screen: the periods chosen on Home and Reports. Both open on the
+ * accounting month holding today, which with a later start of month can still be last month.
+ */
+class AppUi(today: LocalDate, rules: PeriodRules) {
     var tab by mutableIntStateOf(0)
-    var homePeriod by mutableStateOf<Period>(Period.Month(YearMonth.from(today)))
-    var reportPeriod by mutableStateOf<Period>(Period.Month(YearMonth.from(today)))
+    var homePeriod by mutableStateOf<Period>(Period.Month(rules.monthOf(today)))
+    var reportPeriod by mutableStateOf<Period>(Period.Month(rules.monthOf(today)))
 }
 
 @Composable
