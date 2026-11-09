@@ -13,6 +13,7 @@ import time
 import unittest
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from http.server import ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -21,6 +22,10 @@ srv = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(srv)
 
 RIGHT = "secret"
+
+
+class LoopbackServer(ThreadingHTTPServer):
+    request_queue_size = 64  # room for requests sent side by side, so none waits to connect
 
 
 def document(*notes, photo=None):
@@ -43,7 +48,7 @@ class SyncServerTest(unittest.TestCase):
         srv.failures.clear()
         srv.pruned.clear()
         srv.auth_cache.clear()
-        self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), srv.Handler)
+        self.httpd = LoopbackServer(("127.0.0.1", 0), srv.Handler)
         self.httpd.daemon_threads = True
         self.base = f"http://127.0.0.1:{self.httpd.server_address[1]}"
         threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
@@ -271,6 +276,23 @@ class SyncServerTest(unittest.TestCase):
         status, _, headers = self.call("GET", "/state", password=RIGHT)
         self.assertEqual(status, 429)
         self.assertTrue(headers["Retry-After"])
+
+    def test_wrong_passwords_sent_side_by_side_get_no_more_tries(self):
+        real = srv.check_login
+
+        def slow(header):  # as bcrypt is, which is when the others arrive
+            time.sleep(0.5)
+            return real(header)
+
+        srv.check_login = slow
+        try:
+            tries = srv.FAIL_LIMIT * 3
+            with ThreadPoolExecutor(tries) as pool:
+                codes = list(pool.map(lambda _: self.call("GET", "/state", password="wrong")[0], range(tries)))
+        finally:
+            srv.check_login = real
+        self.assertEqual((codes.count(401), codes.count(429)), (srv.FAIL_LIMIT, tries - srv.FAIL_LIMIT))
+        self.assertEqual(self.call("GET", "/state", password=RIGHT)[0], 429)
 
     def test_users_do_not_see_each_others_copies(self):
         self.put(document("mine"), '"0"')
