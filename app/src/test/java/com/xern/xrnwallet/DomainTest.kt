@@ -29,8 +29,10 @@ import com.xern.xrnwallet.domain.Savings
 import com.xern.xrnwallet.domain.SeparatorStyle
 import com.xern.xrnwallet.domain.WeekendRule
 import com.xern.xrnwallet.ui.AppUi
+import com.xern.xrnwallet.ui.BillStart
 import com.xern.xrnwallet.ui.Fmt
 import com.xern.xrnwallet.ui.accountLogo
+import com.xern.xrnwallet.ui.billStart
 import com.xern.xrnwallet.ui.firstSteps
 import com.xern.xrnwallet.work.WidgetFigures
 import java.time.DayOfWeek
@@ -275,6 +277,21 @@ class DomainTest {
         assertEquals(490_000_000L, snapshot.balance(abroad))
         assertEquals(27288L, snapshot.balanceInBase(abroad))
         assertEquals(7212L, snapshot.bills.totals().expense)
+    }
+
+    @Test
+    fun aNewBillStartsInTheCurrencyOfItsAccount() {
+        val cash = Account(id = 1, name = "Cash", currency = "AUD")
+        val card = Account(id = 2, name = "US card", currency = "USD")
+        val s = Snapshot(
+            accounts = listOf(cash, card),
+            rates = listOf(CurrencyRate("USD", 1.53)),
+            bills = listOf(bill(LocalDate.of(2026, 11, 8), 1500, account = 2, currency = "USD", rate = 1.53)),
+        )
+        // Typing 20 on the US card must record US$20, not A$20.
+        assertEquals(BillStart(2, "USD"), s.billStart("AUD"))
+        assertEquals(BillStart(1, "AUD"), s.copy(bills = emptyList()).billStart("AUD"))
+        assertEquals(BillStart(null, "EUR"), Snapshot().billStart("EUR"))
     }
 
     @Test
