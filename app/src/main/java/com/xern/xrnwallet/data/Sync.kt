@@ -173,6 +173,17 @@ class SyncEngine(
         return sync()
     }
 
+    /**
+     * For a change that replaces this phone's data on purpose: restoring a file, or deleting
+     * everything. The result is no edit of the copy this phone last matched, and sent up as one it
+     * would replace the server's and so every other phone's, newer changes and all. So this phone
+     * forgets that copy, as a new phone has none, and the next sync asks which to keep.
+     */
+    suspend fun replaceHere(change: suspend () -> Unit) {
+        meta.save(SyncMeta(syncedAt = meta.load().syncedAt))
+        change()
+    }
+
     private suspend fun firstSync(body: String, hash: String, state: SyncMeta): SyncOutcome {
         val copy = server.current()
         return when {

@@ -276,6 +276,7 @@ otherwise:
 | Situation | What happens |
 | --- | --- |
 | A new phone connects to a server that has a copy | It asks which to keep |
+| This phone was restored from a file, or had all its data deleted | It asks which to keep, as a new phone does |
 | Both sides changed | It asks which to keep |
 | The server went backwards, restored from a backup say | It asks which to keep |
 | An upload arrived but its answer was lost | It recognises its own upload by hash and carries on |

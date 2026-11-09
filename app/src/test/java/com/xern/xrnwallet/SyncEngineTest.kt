@@ -357,6 +357,39 @@ class SyncEngineTest {
         assertTrue("second and one added meanwhile" in server.history.map { it.body })
     }
 
+    @Test fun aPhoneRestoredFromAFileAsksRatherThanReplacingTheServer() = runBlocking {
+        engine.sync()
+        otherPhoneWrites("bills and the other phone's lunch")
+        assertEquals(SyncOutcome.Downloaded, engine.sync())
+        engine.replaceHere { wallet.content = "last month's backup" }
+        assertConflict(engine.sync())
+        assertConflict(engine.sync())
+        assertEquals("bills and the other phone's lunch", server.body)
+        assertEquals("last month's backup", wallet.content)
+        assertEquals("the last sync time stays", 1000L, meta.meta.syncedAt)
+    }
+
+    @Test fun aRestoredPhoneReplacesTheServerWhenToldTo() = runBlocking {
+        engine.sync()
+        engine.replaceHere { wallet.content = "last month's backup" }
+        assertConflict(engine.sync())
+        assertEquals(SyncOutcome.Uploaded, engine.keepPhone())
+        assertEquals("last month's backup", server.body)
+        assertTrue("bills" in server.history.map { it.body })
+        assertEquals(SyncOutcome.UpToDate, engine.sync())
+    }
+
+    @Test fun aPhoneWithEverythingDeletedCanTakeTheServersCopyBack() = runBlocking {
+        engine.sync()
+        engine.replaceHere { wallet.content = "a fresh wallet" }
+        assertConflict(engine.sync())
+        engine.keepServer()
+        assertEquals("bills", wallet.content)
+        assertEquals("bills", server.body)
+        assertTrue("a fresh wallet" in server.history.map { it.body })
+        assertEquals(SyncOutcome.UpToDate, engine.sync())
+    }
+
     @Test fun anEarlierCopyWaitsWhileThePhoneAndServerDiffer() = runBlocking {
         engine.sync()
         wallet.content = "second"

@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.xern.xrnwallet.BuildConfig
 import com.xern.xrnwallet.data.BillType
 import com.xern.xrnwallet.data.Seed
@@ -69,6 +70,7 @@ fun MineScreen() {
     val f = fmt()
     val nav = LocalNav.current
     val repo = LocalRepo.current
+    val sync = syncManager()
     val scope = rememberCoroutineScope()
     val totals = remember(s) { s.bills.totals() }
     val records = remember(s) { s.bills.count { it.type != BillType.TRANSFER } }
@@ -150,14 +152,17 @@ fun MineScreen() {
         }
     }
     if (deleteAll) {
+        val connected = sync.status.collectAsStateWithLifecycle().value.connected
         ConfirmDialog(
             "Delete all data?",
-            "Every bill, account, ledger, budget and plan on this phone will be removed. This cannot be undone.",
+            "Every bill, account, ledger, budget and plan on this phone will be removed. " +
+                if (connected) "The server's copy stays, and Data synchronization asks which of the two to keep." else "This cannot be undone.",
             onDismiss = { deleteAll = false },
         ) {
             deleteAll = false
             nav.popBackStack("main", false)
-            scope.launch { repo.deleteEverything() }
+            // Not sent up as an edit, which would empty the server's copy and every other phone.
+            scope.launch { sync.replaceHere { repo.deleteEverything() } }
         }
     }
 }

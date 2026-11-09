@@ -43,8 +43,8 @@ change and when the app opens, retries by itself when the server can't be reache
 6 hours. A change made on another phone comes down the same way.
 
 Nothing is overwritten without asking. When both sides changed, when a new phone meets a server that
-already has a copy, or when the server went backwards, the app asks which copy to keep, and files the
-other on the server first. The server keeps every copy it replaces, the last 20 and the first of each
+already has a copy, when this phone was restored from a file or had all its data deleted, or when the
+server went backwards, the app asks which copy to keep, and files the other on the server first. The server keeps every copy it replaces, the last 20 and the first of each
 day for 60 days, so Earlier copies can undo a choice.
 
 The app lock never leaves the phone: taking the server's copy keeps this phone's own lock. The login

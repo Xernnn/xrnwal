@@ -163,6 +163,21 @@ class SyncManager(context: Context, private val repo: Repository, private val sc
     }
 
     /**
+     * Runs [change], which replaces this phone's data on purpose, such as restoring a file. While
+     * connected, the next sync then asks which copy to keep: see [SyncEngine.replaceHere]. No sync runs
+     * during it, so none can send the result up before this phone has forgotten what it matched, and
+     * like [attempt] it runs in the app's scope, so a screen closing can't stop it halfway.
+     */
+    suspend fun replaceHere(change: suspend () -> Unit) {
+        scope.async(Dispatchers.IO) {
+            lock.withLock {
+                val login = login
+                if (login == null) change() else engine(login).replaceHere(change)
+            }
+        }.await()
+    }
+
+    /**
      * Runs [work] unless a sync is running, and says whether it ran. For tidying that can wait, like
      * clearing out unused photos: a download picks which photos to fetch before its bills land, so a
      * photo it means to use can look unused in between.
