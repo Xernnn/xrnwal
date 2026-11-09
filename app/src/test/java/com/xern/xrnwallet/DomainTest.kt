@@ -8,6 +8,7 @@ import com.xern.xrnwallet.data.Budget
 import com.xern.xrnwallet.data.Category
 import com.xern.xrnwallet.data.CurrencyRate
 import com.xern.xrnwallet.data.Ledger
+import com.xern.xrnwallet.data.PhotoFiles
 import com.xern.xrnwallet.data.Recurring
 import com.xern.xrnwallet.data.SavingsDeposit
 import com.xern.xrnwallet.data.SavingsPlan
@@ -37,6 +38,7 @@ import com.xern.xrnwallet.ui.billStart
 import com.xern.xrnwallet.ui.currencyChoices
 import com.xern.xrnwallet.ui.firstSteps
 import com.xern.xrnwallet.work.WidgetFigures
+import java.io.File
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
@@ -45,9 +47,13 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 
 class DomainTest {
+    @get:Rule val folder = TemporaryFolder()
+
     private val format = MoneyFormat(SeparatorStyle.DOT_COMMA, DecimalMode.ADAPTIVE)
 
     private fun bill(
@@ -503,6 +509,31 @@ class DomainTest {
         assertEquals(sundays.take(2), weekly.copy(times = 2).due(now, setOf(2L)))
         // Its ledger was deleted: bills there would count in every total but show in no ledger.
         assertEquals(emptyList<java.time.LocalDateTime>(), weekly.due(now, setOf(1L)))
+    }
+
+    @Test
+    fun photosNoBillNamesAreClearedOutOnceADayOld() {
+        val now = 1_800_000_000_000L
+        fun photo(name: String, ageMillis: Long) =
+            folder.newFile(name).apply { writeBytes(byteArrayOf(1)); setLastModified(now - ageMillis) }
+        val day = 24 * 60 * 60 * 1000L
+        val named = photo("named.jpg", 30 * day)
+        val shared = photo("shared.jpg", 30 * day)
+        val deleted = photo("deleted.jpg", 30 * day)
+        val picked = photo("picked.jpg", 60_000)
+        val receipt = bill(LocalDate.of(2026, 11, 2), 1200)
+        val bills = listOf(
+            receipt.copy(id = 1, photo = named.absolutePath),
+            // Add again for today copies the bill, photo and all, so two bills can name one file.
+            receipt.copy(id = 2, photo = shared.absolutePath),
+            receipt.copy(id = 3, photo = shared.absolutePath),
+        )
+        assertEquals(listOf("deleted.jpg"), PhotoFiles.sweep(folder.root, bills, now))
+        assertFalse(deleted.exists())
+        // Just picked for a bill not saved yet.
+        assertTrue(picked.exists())
+        assertTrue(named.exists() && shared.exists())
+        assertEquals(emptyList<String>(), PhotoFiles.sweep(File(folder.root, "none yet"), bills, now))
     }
 
     @Test

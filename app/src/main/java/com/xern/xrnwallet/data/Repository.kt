@@ -47,6 +47,23 @@ data class Backup(
     val photos: Map<String, String> = emptyMap(),
 )
 
+object PhotoFiles {
+    /** As the server's own grace: a photo just picked for a bill not saved yet, or just come down, stays. */
+    private const val GRACE_MILLIS = 24 * 60 * 60 * 1000L
+
+    /**
+     * Deletes the files in [folder] that no bill names, and returns their names. Deleting a bill,
+     * removing or replacing its photo, leaving an edit unsaved and restoring each leave one behind.
+     * Only files at least a day old go.
+     */
+    fun sweep(folder: File, bills: List<Bill>, now: Long): List<String> {
+        val named = bills.mapNotNullTo(HashSet()) { bill -> bill.photo?.let { File(it).name } }
+        return folder.listFiles().orEmpty()
+            .filter { it.isFile && it.name !in named && now - it.lastModified() >= GRACE_MILLIS && it.delete() }
+            .map { it.name }
+    }
+}
+
 class Repository(
     private val context: Context,
     private val db: AppDatabase,
@@ -379,6 +396,11 @@ class Repository(
             .filter(::isSafePhotoName).distinct()
 
     fun photoFile(name: String): File = File(File(context.filesDir, "photos"), name)
+
+    /** Clears out the photo files no bill names any more. */
+    suspend fun sweepPhotos() = withContext(Dispatchers.IO) {
+        PhotoFiles.sweep(File(context.filesDir, "photos"), dao.billsNow(), System.currentTimeMillis())
+    }
 
     /**
      * Replaces everything with a backup. The file is fully parsed before anything is deleted.

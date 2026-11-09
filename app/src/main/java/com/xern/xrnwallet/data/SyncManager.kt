@@ -162,6 +162,21 @@ class SyncManager(context: Context, private val repo: Repository, private val sc
         attempt(login) { it.restoreEarlier(id) }
     }
 
+    /**
+     * Runs [work] unless a sync is running, and says whether it ran. For tidying that can wait, like
+     * clearing out unused photos: a download picks which photos to fetch before its bills land, so a
+     * photo it means to use can look unused in between.
+     */
+    suspend fun unlessSyncing(work: suspend () -> Unit): Boolean {
+        if (!lock.tryLock()) return false
+        try {
+            work()
+        } finally {
+            lock.unlock()
+        }
+        return true
+    }
+
     private companion object {
         const val CHANGE_DELAY_MILLIS = 5_000L
         const val MAX_DEVICE_NAME = 40
