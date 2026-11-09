@@ -150,6 +150,32 @@ class DomainTest {
     }
 
     @Test
+    fun aWeekendCanMoveADateTwoMonthsFromItsCalendarMonth() {
+        // 2026-02-28 is a Saturday, so with Backward February starts on Mar 2 and March 1 is still January's.
+        val backward = PeriodRules(startDay = 28, weekend = WeekendRule.LATER)
+        assertEquals(YearMonth.of(2026, 1), backward.monthOf(LocalDate.of(2026, 3, 1)))
+        // 2026-11-01 is a Sunday, so with Forward November starts on Oct 30, labelled December.
+        val forward = PeriodRules(startDay = 1, weekend = WeekendRule.EARLIER, belonging = Belonging.END_MONTH)
+        assertEquals(YearMonth.of(2026, 12), forward.monthOf(LocalDate.of(2026, 10, 30)))
+    }
+
+    @Test
+    fun everyDayBelongsToExactlyOneMonthWhateverTheSettings() {
+        val first = LocalDate.of(2024, 1, 1)
+        val last = LocalDate.of(2032, 12, 31)
+        for (startDay in 1..28) for (weekend in WeekendRule.entries) for (belonging in Belonging.entries) {
+            val rules = PeriodRules(startDay = startDay, weekend = weekend, belonging = belonging)
+            var date = first
+            while (date <= last) {
+                val calendar = YearMonth.from(date)
+                val holding = (-3L..3L).map { calendar.plusMonths(it) }.filter { date in rules.monthRange(it) }
+                assertEquals("$date in $rules", listOf(rules.monthOf(date)), holding)
+                date = date.plusDays(1)
+            }
+        }
+    }
+
+    @Test
     fun weekendRuleMovesStart() {
         // 2026-11-01 is a Sunday.
         val earlier = PeriodRules(weekend = WeekendRule.EARLIER)
