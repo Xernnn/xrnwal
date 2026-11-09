@@ -1156,7 +1156,7 @@ fun CurrenciesScreen() {
         val hasRate = code in s.rates.map { it.code }
         ConfirmDialog(
             "Change base currency to $code?",
-            if (hasRate) "Every total will be shown in $code, using today's rate between the two." else "Add $code as a billing currency with a rate first, so totals can be converted.",
+            if (hasRate) "Every total and budget will be shown in $code, using today's rate between the two." else "Add $code as a billing currency with a rate first, so totals can be converted.",
             confirm = if (hasRate) "Change" else "OK",
             danger = false,
             onDismiss = { confirmBase = null },

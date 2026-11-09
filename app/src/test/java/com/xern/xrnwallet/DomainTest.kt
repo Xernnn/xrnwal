@@ -9,6 +9,7 @@ import com.xern.xrnwallet.data.Category
 import com.xern.xrnwallet.data.CurrencyRate
 import com.xern.xrnwallet.data.Ledger
 import com.xern.xrnwallet.data.PhotoFiles
+import com.xern.xrnwallet.data.Rebased
 import com.xern.xrnwallet.data.Recurring
 import com.xern.xrnwallet.data.SavingsDeposit
 import com.xern.xrnwallet.data.SavingsPlan
@@ -324,6 +325,29 @@ class DomainTest {
         assertFalse(s.categoryInUse(travel))
         val rule = Recurring(ledgerId = 1, type = BillType.EXPENSE, categoryId = 3, amountCents = 900, currency = "AUD", startEpochDay = 0)
         assertTrue(s.copy(recurring = listOf(rule)).categoryInUse(travel))
+    }
+
+    @Test
+    fun changingTheBaseConvertsBudgetsAndKeepsBillsAlreadyInItAsTheyAre() {
+        // A euro is A$1.65 today. It was A$1.50 when the euro bill was recorded.
+        val day = LocalDate.of(2026, 10, 5)
+        val rebased = Rebased.of(
+            previous = "AUD",
+            code = "EUR",
+            bills = listOf(
+                bill(day, 10000, currency = "EUR", rate = 1.50),
+                bill(day, 16500),
+                bill(day, 1000, currency = "USD", rate = 1.53),
+            ),
+            rates = listOf(CurrencyRate("EUR", 1.65), CurrencyRate("USD", 1.53, 1)),
+            budgets = listOf(Budget(id = 1, amountCents = 82500), Budget(id = 2, categoryId = 5, amountCents = 16500)),
+        )!!
+        // €100 counts as €100, not €91. The others keep their rate, rescaled as before.
+        assertEquals(listOf(10000L, 10000L, 927L), rebased.bills.map { it.baseCents })
+        assertEquals(listOf(50000L, 10000L), rebased.budgets.map { it.amountCents })
+        assertEquals(listOf("USD", "AUD"), rebased.rates.map { it.code })
+        assertEquals(1 / 1.65, rebased.rates.last().rate, 1e-12)
+        assertNull(Rebased.of("AUD", "JPY", rebased.bills, rebased.rates, rebased.budgets))
     }
 
     @Test

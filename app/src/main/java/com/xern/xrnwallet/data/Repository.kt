@@ -2,6 +2,7 @@ package com.xern.xrnwallet.data
 
 import android.content.Context
 import androidx.room.withTransaction
+import com.xern.xrnwallet.domain.Money
 import com.xern.xrnwallet.work.Reminders
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -61,6 +62,27 @@ object PhotoFiles {
         return folder.listFiles().orEmpty()
             .filter { it.isFile && it.name !in named && now - it.lastModified() >= GRACE_MILLIS && it.delete() }
             .map { it.name }
+    }
+}
+
+/** The rows a change of base currency rewrites. */
+data class Rebased(val bills: List<Bill>, val rates: List<CurrencyRate>, val budgets: List<Budget>) {
+    companion object {
+        /**
+         * Moves the base from [previous] to [code], or null when [code] has no rate. Each bill's own
+         * rate is rescaled, so converted history stays consistent instead of being revalued, except a
+         * bill already in [code], which is now simply in the base. Budgets are sums of the base, so they
+         * are converted at today's rate, as balances are.
+         */
+        fun of(previous: String, code: String, bills: List<Bill>, rates: List<CurrencyRate>, budgets: List<Budget>): Rebased? {
+            val pivot = rates.firstOrNull { it.code == code }?.rate ?: return null
+            val rebased = rates.filter { it.code != code }.map { it.copy(rate = it.rate / pivot) }
+            return Rebased(
+                bills = bills.map { it.copy(rate = if (it.currency == code) 1.0 else it.rate / pivot) },
+                rates = rebased + CurrencyRate(previous, 1.0 / pivot, rebased.size),
+                budgets = budgets.map { it.copy(amountCents = Money.convert(it.amountCents, 1.0 / pivot)) },
+            )
+        }
     }
 }
 
@@ -443,20 +465,19 @@ class Repository(
         seedIfEmpty()
     }
 
-    /**
-     * Re-expresses everything against a new base. [code] must already have a rate. Each bill's own
-     * rate is rescaled, so converted history stays consistent instead of being revalued.
-     */
+    /** Re-expresses everything against a new base. [code] must already have a rate. See [Rebased]. */
     suspend fun changeBase(code: String) = withContext(Dispatchers.IO) {
         val previous = store.settings.value.baseCurrency
-        val pivot = dao.ratesNow().firstOrNull { it.code == code }?.rate ?: return@withContext
-        db.withTransaction {
-            dao.putBills(dao.billsNow().map { it.copy(rate = it.rate / pivot) })
-            val rebased = dao.ratesNow().filter { it.code != code }.map { it.copy(rate = it.rate / pivot) }
+        val changed = db.withTransaction {
+            val rebased = Rebased.of(previous, code, dao.billsNow(), dao.ratesNow(), dao.budgetsNow())
+                ?: return@withTransaction false
+            dao.putBills(rebased.bills)
             dao.clearRates()
-            dao.putRates(rebased + CurrencyRate(previous, 1.0 / pivot, rebased.size))
+            dao.putRates(rebased.rates)
+            dao.putBudgets(rebased.budgets)
+            true
         }
-        store.update { it.copy(baseCurrency = code) }
+        if (changed) store.update { it.copy(baseCurrency = code) }
     }
 
     /** Fetches public rates for the base currency. Only ever called from the refresh button. */
