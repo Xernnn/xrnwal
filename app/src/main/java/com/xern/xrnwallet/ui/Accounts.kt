@@ -29,7 +29,6 @@ import com.xern.xrnwallet.data.Account
 import com.xern.xrnwallet.data.AccountKind
 import com.xern.xrnwallet.data.Seed
 import com.xern.xrnwallet.domain.Calculator
-import com.xern.xrnwallet.domain.Currencies
 import com.xern.xrnwallet.domain.Money
 
 @Composable
@@ -298,14 +297,9 @@ fun AccountEditScreen(id: Long) {
             }
         }
     }
+    // Only currencies with a rate, as the Currencies page won't remove one an account uses.
     if (pickCurrency) {
-        OptionDialog(
-            "Currency",
-            Currencies.all.map { it.code },
-            currency,
-            { "${Currencies.info(it).flag}  $it  ${Currencies.info(it).name}" },
-            { pickCurrency = false },
-        ) {
+        CurrencyDialog({ pickCurrency = false }, selected = currency) {
             currency = it
             pickCurrency = false
         }

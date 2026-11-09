@@ -79,7 +79,8 @@ Transfers appear in account history as "From >> To" and count in neither expense
   PayPal, Google Wallet, Amazon Pay, Apple. Investment and Cash get their own marks. The name is the only
   setup, so imported and restored accounts show theirs too.
 - Accounts grouped by type. Foreign accounts show native balance plus base-currency value.
-- Create account: type picker, Current balance, Currency, Notes, Included in total assets.
+- Create account: type picker, Current balance, Currency (billing currencies only), Notes, Included in
+  total assets.
 - Types. Savings: PayPal, Google Wallet, Amazon Pay, Cash, Apple Card, Bank Card (custom name and
   icon), Other (custom). Credit: Apple Card, Debt, Credit Card (custom), Other (custom).
 - Detail: icon, name, Included in total assets chip, Current balance, history including transfers.

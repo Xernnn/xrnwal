@@ -727,13 +727,18 @@ fun TagDialog(tags: List<Tag>, selected: List<Long>, onDismiss: () -> Unit, onCr
     }
 }
 
-/** The base currency plus the billing currencies set up in Currencies. */
+/**
+ * The base currency plus the billing currencies set up in Currencies, for bills and accounts alike.
+ * Any other has no rate, so each unit would count as one of the base.
+ */
+fun Snapshot.currencyChoices(base: String): List<String> = listOf(base) + rates.map { it.code }.filter { it != base }
+
 @Composable
-fun CurrencyDialog(onDismiss: () -> Unit, onPick: (String) -> Unit) {
+fun CurrencyDialog(onDismiss: () -> Unit, selected: String? = null, onPick: (String) -> Unit) {
     val s = snap()
     val settings = prefs()
-    val options = listOf(settings.baseCurrency) + s.rates.map { it.code }.filter { it != settings.baseCurrency }
-    OptionDialog("Currency", options, null, { "${Currencies.info(it).flag}  $it  ${Currencies.info(it).name}" }, onDismiss, onPick)
+    val options = s.currencyChoices(settings.baseCurrency)
+    OptionDialog("Currency", options, selected, { "${Currencies.info(it).flag}  $it  ${Currencies.info(it).name}" }, onDismiss, onPick)
 }
 
 @Composable

@@ -33,6 +33,7 @@ import com.xern.xrnwallet.ui.BillStart
 import com.xern.xrnwallet.ui.Fmt
 import com.xern.xrnwallet.ui.accountLogo
 import com.xern.xrnwallet.ui.billStart
+import com.xern.xrnwallet.ui.currencyChoices
 import com.xern.xrnwallet.ui.firstSteps
 import com.xern.xrnwallet.work.WidgetFigures
 import java.time.DayOfWeek
@@ -292,6 +293,13 @@ class DomainTest {
         assertEquals(BillStart(2, "USD"), s.billStart("AUD"))
         assertEquals(BillStart(1, "AUD"), s.copy(bills = emptyList()).billStart("AUD"))
         assertEquals(BillStart(null, "EUR"), Snapshot().billStart("EUR"))
+    }
+
+    @Test
+    fun moneyIsOnlyKeptInCurrenciesWithARate() {
+        // With no VND rate, a VND account holding 25,000,000 would add A$25M to net assets.
+        val s = Snapshot(rates = listOf(CurrencyRate("USD", 1.53), CurrencyRate("EUR", 1.78)))
+        assertEquals(listOf("AUD", "USD", "EUR"), s.currencyChoices("AUD"))
     }
 
     @Test
