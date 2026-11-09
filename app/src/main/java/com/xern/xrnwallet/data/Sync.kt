@@ -87,7 +87,13 @@ interface SyncServer {
 
 interface SyncedWallet {
     suspend fun document(): String
-    suspend fun replaceWith(body: String)
+
+    /**
+     * Replaces this phone's data with [body] if its document still hashes to [expected], and returns
+     * the new document's hash. Null, replacing nothing, when something was saved here first. The check,
+     * the change and the new hash are one step, so no bill saved meanwhile is lost or taken as synced.
+     */
+    suspend fun replaceWith(body: String, expected: String): String?
     fun photosIn(body: String): List<String>
     fun photoFile(name: String): File
 }
@@ -148,8 +154,8 @@ class SyncEngine(
         val copy = server.current()
         if (copy.version == 0L) return sync()
         if (photos()) fetchPhotos(copy.body)
-        keepPhone()
-        wallet.replaceWith(copy.body)
+        // A bill saved while the phone's copy went up isn't in it, so that goes up again first.
+        do keepPhone() while (wallet.replaceWith(copy.body, meta.load().hash.orEmpty()) == null)
         return sync()
     }
 
@@ -159,7 +165,11 @@ class SyncEngine(
         if (before is SyncOutcome.Conflict) return before
         val body = server.earlierCopy(id)
         if (photos()) fetchPhotos(body)
-        wallet.replaceWith(body)
+        // The same for a bill saved since that sync.
+        while (wallet.replaceWith(body, meta.load().hash.orEmpty()) == null) {
+            val again = sync()
+            if (again is SyncOutcome.Conflict) return again
+        }
         return sync()
     }
 
@@ -198,9 +208,8 @@ class SyncEngine(
         // First, so a photo that won't come leaves this phone as it was.
         if (photos()) fetchPhotos(copy.body)
         // That can take a while, and a bill added meanwhile must not be overwritten.
-        if (sha256(wallet.document()) != expected) return SyncOutcome.Conflict(copy.updated)
-        wallet.replaceWith(copy.body)
-        meta.save(SyncMeta(copy.version, sha256(wallet.document()), syncedAt = clock()))
+        val now = wallet.replaceWith(copy.body, expected) ?: return SyncOutcome.Conflict(copy.updated)
+        meta.save(SyncMeta(copy.version, now, syncedAt = clock()))
         return SyncOutcome.Downloaded
     }
 

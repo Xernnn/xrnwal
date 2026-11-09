@@ -93,16 +93,19 @@ private class FakeServer : SyncServer {
 /** A wallet whose whole content is a line of text, with photos named after a `|`. */
 private class FakeWallet(private val folder: File, var content: String) : SyncedWallet {
     var replaced = 0
-    var duringDocument: (() -> Unit)? = null
 
-    override suspend fun document(): String {
-        duringDocument?.invoke()
-        return content
-    }
+    /** A bill saved just as a copy is about to replace this one, and one saved just after. Each happens once. */
+    var beforeReplace: (() -> Unit)? = null
+    var afterReplace: (() -> Unit)? = null
 
-    override suspend fun replaceWith(body: String) {
+    override suspend fun document(): String = content
+
+    override suspend fun replaceWith(body: String, expected: String): String? {
+        beforeReplace?.also { beforeReplace = null }?.invoke()
+        if (sha256(content) != expected) return null
         content = body
         replaced++
+        return sha256(content).also { afterReplace?.also { afterReplace = null }?.invoke() }
     }
 
     override fun photosIn(body: String) = body.substringAfter('|', "").split(',').filter { it.isNotEmpty() }
@@ -273,11 +276,20 @@ class SyncEngineTest {
         synced()
         otherPhoneWrites("from the other phone")
         val added = "a bill added just now"
-        var reads = 0
-        wallet.duringDocument = { if (++reads == 2) wallet.content = added }
+        wallet.beforeReplace = { wallet.content = added }
         assertConflict(sync())
         assertEquals(added, wallet.content)
         assertEquals(0, wallet.replaced)
+    }
+
+    @Test fun aBillAddedJustAfterADownloadStillGoesUp() {
+        synced()
+        otherPhoneWrites("from the other phone")
+        val added = "from the other phone, and a bill added just after"
+        wallet.afterReplace = { wallet.content = added }
+        assertEquals(SyncOutcome.Downloaded, sync())
+        assertEquals(SyncOutcome.Uploaded, sync())
+        assertEquals(added, server.body)
     }
 
     @Test fun keepingThePhoneReplacesTheServerAndKeepsItsCopy() = runBlocking {
@@ -297,6 +309,15 @@ class SyncEngineTest {
         assertEquals("the server's", server.body)
         assertTrue("bills" in server.history.map { it.body })
         assertEquals(SyncOutcome.UpToDate, engine.sync())
+    }
+
+    @Test fun aBillAddedWhileKeepingTheServersCopyGoesUpBeforeItIsReplaced() = runBlocking {
+        server.write("the server's")
+        assertConflict(engine.sync())
+        wallet.beforeReplace = { wallet.content = "bills and one added meanwhile" }
+        engine.keepServer()
+        assertEquals("the server's", wallet.content)
+        assertTrue("bills and one added meanwhile" in server.history.map { it.body })
     }
 
     @Test fun keepingTheServerChangesNothingHereIfThePhonesCopyCantGoUp() = runBlocking {
@@ -324,6 +345,16 @@ class SyncEngineTest {
         assertEquals("bills", wallet.content)
         assertEquals("bills", server.body)
         assertTrue("unsynced third" in server.history.map { it.body })
+    }
+
+    @Test fun aBillAddedWhileAnEarlierCopyComesBackGoesUpBeforeItIsReplaced() = runBlocking {
+        engine.sync()
+        wallet.content = "second"
+        engine.sync()
+        wallet.beforeReplace = { wallet.content = "second and one added meanwhile" }
+        assertEquals(SyncOutcome.Uploaded, engine.restoreEarlier("1"))
+        assertEquals("bills", wallet.content)
+        assertTrue("second and one added meanwhile" in server.history.map { it.body })
     }
 
     @Test fun anEarlierCopyWaitsWhileThePhoneAndServerDiffer() = runBlocking {

@@ -46,7 +46,7 @@ class SyncManager(context: Context, private val repo: Repository, private val sc
 
     private val wallet = object : SyncedWallet {
         override suspend fun document() = repo.syncDocument()
-        override suspend fun replaceWith(body: String) = repo.restore(body, keepLock = true)
+        override suspend fun replaceWith(body: String, expected: String) = repo.replaceIfUnchanged(body, expected)
         override fun photosIn(body: String) = repo.photosIn(body)
         override fun photoFile(name: String) = repo.photoFile(name)
     }

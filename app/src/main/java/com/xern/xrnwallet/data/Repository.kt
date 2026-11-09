@@ -388,29 +388,28 @@ class Repository(
      * What the home server keeps: a backup with the app lock left out and photos named rather than
      * included. Rows are in a fixed order, because the sync compares this text to see what changed.
      */
-    suspend fun syncDocument(): String = withContext(Dispatchers.IO) {
-        db.withTransaction {
-            json.encodeToString(
-                Backup(
-                    settings = store.exportWithoutLock(),
-                    ledgers = dao.ledgersNow().sortedBy { it.id },
-                    accounts = dao.accountsNow().sortedBy { it.id },
-                    categories = dao.categoriesNow().sortedBy { it.id },
-                    tags = dao.tagsNow().sortedBy { it.id },
-                    bills = dao.billsNow().sortedBy { it.id }.map { it.copy(photo = it.photo?.let(::File)?.name) },
-                    billTags = dao.billTagsNow().sortedWith(compareBy({ it.billId }, { it.tagId })),
-                    budgets = dao.budgetsNow().sortedBy { it.id },
-                    recurring = dao.recurringNow().sortedBy { it.id },
-                    plans = dao.plansNow().sortedBy { it.id },
-                    deposits = dao.depositsNow().sortedBy { it.id },
-                    checklists = dao.checklistsNow().sortedBy { it.id },
-                    checklistItems = dao.checklistItemsNow().sortedBy { it.id },
-                    reminders = dao.remindersNow().sortedBy { it.id },
-                    rates = dao.ratesNow().sortedBy { it.code },
-                ),
-            )
-        }
-    }
+    suspend fun syncDocument(): String = withContext(Dispatchers.IO) { db.withTransaction { document() } }
+
+    /** [syncDocument] inside a transaction already open. */
+    private suspend fun document(): String = json.encodeToString(
+        Backup(
+            settings = store.exportWithoutLock(),
+            ledgers = dao.ledgersNow().sortedBy { it.id },
+            accounts = dao.accountsNow().sortedBy { it.id },
+            categories = dao.categoriesNow().sortedBy { it.id },
+            tags = dao.tagsNow().sortedBy { it.id },
+            bills = dao.billsNow().sortedBy { it.id }.map { it.copy(photo = it.photo?.let(::File)?.name) },
+            billTags = dao.billTagsNow().sortedWith(compareBy({ it.billId }, { it.tagId })),
+            budgets = dao.budgetsNow().sortedBy { it.id },
+            recurring = dao.recurringNow().sortedBy { it.id },
+            plans = dao.plansNow().sortedBy { it.id },
+            deposits = dao.depositsNow().sortedBy { it.id },
+            checklists = dao.checklistsNow().sortedBy { it.id },
+            checklistItems = dao.checklistItemsNow().sortedBy { it.id },
+            reminders = dao.remindersNow().sortedBy { it.id },
+            rates = dao.ratesNow().sortedBy { it.code },
+        ),
+    )
 
     /** The photo files a server copy names, leaving out any name that isn't a plain file name. */
     fun photosIn(body: String): List<String> =
@@ -424,11 +423,21 @@ class Repository(
         PhotoFiles.sweep(File(context.filesDir, "photos"), dao.billsNow(), System.currentTimeMillis())
     }
 
+    /** Replaces everything with a backup file, app lock included. */
+    suspend fun restore(text: String) {
+        replace(text, keepLock = false, expected = null)
+    }
+
+    /** For [SyncedWallet.replaceWith]: a server copy, which leaves the app lock out, so this phone keeps its own. */
+    suspend fun replaceIfUnchanged(text: String, expected: String): String? = replace(text, keepLock = true, expected)
+
     /**
-     * Replaces everything with a backup. The file is fully parsed before anything is deleted.
-     * [keepLock] is for server copies, which leave the app lock out: this phone keeps its own.
+     * Replaces everything with a backup and returns the hash of the new [syncDocument]. The file is
+     * fully parsed before anything is deleted. With [expected], only while the document here still
+     * hashes to it, else null with nothing replaced. The check, the change and the new hash are one
+     * transaction, so a bill saved meanwhile waits for it and lands after, still to be sent.
      */
-    suspend fun restore(text: String, keepLock: Boolean = false) = withContext(Dispatchers.IO) {
+    private suspend fun replace(text: String, keepLock: Boolean, expected: String?): String? = withContext(Dispatchers.IO) {
         val backup = json.decodeFromString<Backup>(text)
         // This app would drop what it can't read, then send that back to the server without it.
         check(backup.version <= BACKUP_VERSION) { "Made by a newer version of the app" }
@@ -437,7 +446,8 @@ class Repository(
         val folder = File(context.filesDir, "photos").apply { mkdirs() }
         // Names come from the file, so only the last part of each is ever used as a path.
         photos.forEach { (name, bytes) -> File(folder, File(name).name).writeBytes(bytes) }
-        db.withTransaction {
+        val hash = db.withTransaction {
+            if (expected != null && sha256(document()) != expected) return@withTransaction null
             dao.clearEverything()
             dao.putLedgers(backup.ledgers)
             dao.putAccounts(backup.accounts)
@@ -453,9 +463,11 @@ class Repository(
             dao.putChecklistItems(backup.checklistItems)
             dao.putReminders(backup.reminders)
             dao.putRates(backup.rates)
-        }
-        if (keepLock) store.restoreKeepingLock(backup.settings) else store.restore(backup.settings)
+            if (keepLock) store.restoreKeepingLock(backup.settings) else store.restore(backup.settings)
+            sha256(document())
+        } ?: return@withContext null
         Reminders.scheduleAll(context, backup.reminders)
+        hash
     }
 
     suspend fun deleteEverything() = withContext(Dispatchers.IO) {
