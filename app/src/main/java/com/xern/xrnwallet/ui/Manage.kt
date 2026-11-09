@@ -342,7 +342,7 @@ fun CategoryEditScreen(id: Long, type: Int, parent: Long?) {
     var icon by remember { mutableStateOf(existing?.icon ?: "⭐") }
     var incomeTab by remember { mutableIntStateOf(if (type == BillType.INCOME) 1 else 0) }
     var confirm by remember { mutableStateOf(false) }
-    val used = existing != null && s.bills.any { it.categoryId == existing.id }
+    val used = existing != null && s.categoryInUse(existing)
     val creatingTop = existing == null && parent == null
 
     Page(
@@ -383,7 +383,7 @@ fun CategoryEditScreen(id: Long, type: Int, parent: Long?) {
         if (used) {
             ConfirmDialog(
                 "In use",
-                "Bills use this category, so it cannot be deleted. Move it to Not used instead.",
+                "Bills or recurring items use this category or its subcategories, so it cannot be deleted. Move it to Not used instead.",
                 confirm = "OK",
                 danger = false,
                 onDismiss = { confirm = false },

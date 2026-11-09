@@ -5,6 +5,7 @@ import com.xern.xrnwallet.data.Bill
 import com.xern.xrnwallet.data.BillCsv
 import com.xern.xrnwallet.data.BillType
 import com.xern.xrnwallet.data.Budget
+import com.xern.xrnwallet.data.Category
 import com.xern.xrnwallet.data.CurrencyRate
 import com.xern.xrnwallet.data.Ledger
 import com.xern.xrnwallet.data.Recurring
@@ -300,6 +301,23 @@ class DomainTest {
         // With no VND rate, a VND account holding 25,000,000 would add A$25M to net assets.
         val s = Snapshot(rates = listOf(CurrencyRate("USD", 1.53), CurrencyRate("EUR", 1.78)))
         assertEquals(listOf("AUD", "USD", "EUR"), s.currencyChoices("AUD"))
+    }
+
+    @Test
+    fun aCategoryIsInUseWhileAnythingUsesItOrItsSubcategories() {
+        val food = Category(id = 1, type = BillType.EXPENSE, name = "Food", icon = "🍔")
+        val groceries = Category(id = 2, type = BillType.EXPENSE, name = "Groceries", icon = "🛒", parentId = 1)
+        val travel = Category(id = 3, type = BillType.EXPENSE, name = "Travel", icon = "✈️")
+        val s = Snapshot(
+            categories = listOf(food, groceries, travel),
+            bills = listOf(bill(LocalDate.of(2026, 11, 2), 4500).copy(categoryId = 2)),
+        )
+        // Deleting Food takes Groceries with it, which would leave that bill Uncategorised for good.
+        assertTrue(s.categoryInUse(food))
+        assertTrue(s.categoryInUse(groceries))
+        assertFalse(s.categoryInUse(travel))
+        val rule = Recurring(ledgerId = 1, type = BillType.EXPENSE, categoryId = 3, amountCents = 900, currency = "AUD", startEpochDay = 0)
+        assertTrue(s.copy(recurring = listOf(rule)).categoryInUse(travel))
     }
 
     @Test
