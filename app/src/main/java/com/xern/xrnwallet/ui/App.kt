@@ -99,7 +99,7 @@ fun WalletRoot(activity: MainActivity) {
     val repo = (LocalContext.current.applicationContext as WalletApp).repository
     val settings by repo.store.settings.collectAsStateWithLifecycle()
     val nav = rememberNavController()
-    val ui = remember { AppUi(LocalDate.now()) }
+    val ui = remember { AppUi(LocalDate.now(), settings.periodRules) }
     val scope = rememberCoroutineScope()
     val undo = remember { BillUndo(repo, scope) }
 

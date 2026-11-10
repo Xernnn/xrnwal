@@ -49,6 +49,15 @@ data class Snapshot(
         return category.parentId?.let { categoryById[it] } ?: category
     }
 
+    /**
+     * Whether a bill or a recurring item uses [category] or one of its subcategories. Deleting it takes
+     * the subcategories too, and anything left using one would be Uncategorised for good.
+     */
+    fun categoryInUse(category: Category): Boolean {
+        val ids = categories.filter { it.parentId == category.id }.mapTo(hashSetOf(category.id)) { it.id }
+        return bills.any { it.categoryId in ids } || recurring.any { it.categoryId in ids }
+    }
+
     fun inLedger(ledgerId: Long): List<Bill> =
         if (ledgerId == ALL_LEDGERS) bills else bills.filter { it.ledgerId == ledgerId }
 

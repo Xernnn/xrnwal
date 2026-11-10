@@ -164,9 +164,15 @@ fun LedgerDetailScreen(id: Long) {
         }
     }
     if (confirm) {
+        val rules = s.recurring.count { it.ledgerId == id }
+        val alsoRules = when (rules) {
+            0 -> ""
+            1 -> ", and the recurring item that records into it,"
+            else -> ", and the $rules recurring items that record into it,"
+        }
         ConfirmDialog(
             "Delete ${ledger.name}?",
-            "All ${bills.size} bills in this ledger will be deleted too. This cannot be undone.",
+            "All ${bills.size} bills in this ledger$alsoRules will be deleted too. This cannot be undone.",
             onDismiss = { confirm = false },
         ) {
             confirm = false
@@ -342,7 +348,7 @@ fun CategoryEditScreen(id: Long, type: Int, parent: Long?) {
     var icon by remember { mutableStateOf(existing?.icon ?: "⭐") }
     var incomeTab by remember { mutableIntStateOf(if (type == BillType.INCOME) 1 else 0) }
     var confirm by remember { mutableStateOf(false) }
-    val used = existing != null && s.bills.any { it.categoryId == existing.id }
+    val used = existing != null && s.categoryInUse(existing)
     val creatingTop = existing == null && parent == null
 
     Page(
@@ -383,7 +389,7 @@ fun CategoryEditScreen(id: Long, type: Int, parent: Long?) {
         if (used) {
             ConfirmDialog(
                 "In use",
-                "Bills use this category, so it cannot be deleted. Move it to Not used instead.",
+                "Bills or recurring items use this category or its subcategories, so it cannot be deleted. Move it to Not used instead.",
                 confirm = "OK",
                 danger = false,
                 onDismiss = { confirm = false },

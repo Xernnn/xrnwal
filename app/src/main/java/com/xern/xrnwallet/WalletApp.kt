@@ -34,6 +34,8 @@ class WalletApp : Application() {
             repository.seedIfEmpty()
             repository.runRecurring()
         }
+        // As the app starts, before a deleted bill's Undo can be on offer, and between syncs.
+        scope.launch { sync.unlessSyncing { repository.sweepPhotos() } }
         RecurringWorker.schedule(this)
         sync.start()
         scope.launch {

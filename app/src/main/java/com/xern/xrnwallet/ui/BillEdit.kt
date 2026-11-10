@@ -75,6 +75,7 @@ import com.xern.xrnwallet.data.Bill
 import com.xern.xrnwallet.data.BillCsv
 import com.xern.xrnwallet.data.BillType
 import com.xern.xrnwallet.data.Category
+import com.xern.xrnwallet.data.Snapshot
 import com.xern.xrnwallet.data.Tag
 import com.xern.xrnwallet.domain.Calculator
 import com.xern.xrnwallet.domain.Currencies
@@ -122,6 +123,19 @@ private fun savePhoto(context: Context, uri: Uri): String? = runCatching {
     target.absolutePath
 }.getOrNull()
 
+data class BillStart(val accountId: Long?, val currency: String)
+
+/**
+ * Where a new bill starts: on the account the last bill used, or else the first open one, in that
+ * account's currency as picking it would set, or in [base] with no account. Otherwise 20 typed for a
+ * US card would leave it as A$20.
+ */
+fun Snapshot.billStart(base: String): BillStart {
+    val account = bills.firstOrNull { it.accountId != null && it.type != BillType.TRANSFER }?.accountId?.let(accountById::get)
+        ?: accounts.firstOrNull { !it.archived }
+    return BillStart(account?.id, account?.currency ?: base)
+}
+
 @Composable
 fun BillEditScreen(id: Long, date: Long, initialType: Int) {
     val s = snap()
@@ -143,17 +157,12 @@ fun BillEditScreen(id: Long, date: Long, initialType: Int) {
         )
     }
     val usable = s.accounts.filter { !it.archived }
-    var accountId by remember {
-        mutableStateOf(
-            if (existing != null) existing.accountId
-            else s.bills.firstOrNull { it.accountId != null && it.type != BillType.TRANSFER }?.accountId?.takeIf { s.accountById.containsKey(it) }
-                ?: usable.firstOrNull()?.id,
-        )
-    }
+    val start = remember { s.billStart(settings.baseCurrency) }
+    var accountId by remember { mutableStateOf(if (existing != null) existing.accountId else start.accountId) }
     var toAccountId by remember { mutableStateOf(existing?.toAccountId) }
     var note by remember { mutableStateOf(existing?.note.orEmpty()) }
     var amount by remember { mutableStateOf(existing?.let { Calculator.format(Money.fromCents(it.amountCents)) } ?: "0") }
-    var currency by remember { mutableStateOf(existing?.currency ?: settings.baseCurrency) }
+    var currency by remember { mutableStateOf(existing?.currency ?: start.currency) }
     var feeCents by remember { mutableLongStateOf(existing?.feeCents ?: 0) }
     var photo by remember { mutableStateOf(existing?.photo) }
     var at by remember {
@@ -718,13 +727,18 @@ fun TagDialog(tags: List<Tag>, selected: List<Long>, onDismiss: () -> Unit, onCr
     }
 }
 
-/** The base currency plus the billing currencies set up in Currencies. */
+/**
+ * The base currency plus the billing currencies set up in Currencies, for bills and accounts alike.
+ * Any other has no rate, so each unit would count as one of the base.
+ */
+fun Snapshot.currencyChoices(base: String): List<String> = listOf(base) + rates.map { it.code }.filter { it != base }
+
 @Composable
-fun CurrencyDialog(onDismiss: () -> Unit, onPick: (String) -> Unit) {
+fun CurrencyDialog(onDismiss: () -> Unit, selected: String? = null, onPick: (String) -> Unit) {
     val s = snap()
     val settings = prefs()
-    val options = listOf(settings.baseCurrency) + s.rates.map { it.code }.filter { it != settings.baseCurrency }
-    OptionDialog("Currency", options, null, { "${Currencies.info(it).flag}  $it  ${Currencies.info(it).name}" }, onDismiss, onPick)
+    val options = s.currencyChoices(settings.baseCurrency)
+    OptionDialog("Currency", options, selected, { "${Currencies.info(it).flag}  $it  ${Currencies.info(it).name}" }, onDismiss, onPick)
 }
 
 @Composable

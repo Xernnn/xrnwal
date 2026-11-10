@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.core.content.PermissionChecker
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.xern.xrnwallet.data.Bill
 import com.xern.xrnwallet.data.BillCsv
 import com.xern.xrnwallet.data.BillType
@@ -708,6 +709,8 @@ fun ImportScreen() {
 @Composable
 fun BackupScreen() {
     val repo = LocalRepo.current
+    val sync = syncManager()
+    val connected = sync.status.collectAsStateWithLifecycle().value.connected
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var pendingRestore by remember { mutableStateOf<Uri?>(null) }
@@ -738,7 +741,8 @@ fun BackupScreen() {
     pendingRestore?.let { uri ->
         ConfirmDialog(
             "Restore this backup?",
-            "Everything on this phone will be replaced by the backup.",
+            "Everything on this phone will be replaced by the backup." +
+                if (connected) " The server's copy stays, and the next sync asks which of the two to keep." else "",
             confirm = "Restore",
             onDismiss = { pendingRestore = null },
         ) {
@@ -746,7 +750,8 @@ fun BackupScreen() {
             scope.launch {
                 val outcome = runCatching {
                     val text = withContext(Dispatchers.IO) { readUri(context, uri) } ?: error("unreadable")
-                    repo.restore(text)
+                    // Not sent up as an edit: the server's copy can hold other phones' newer changes.
+                    sync.replaceHere { repo.restore(text) }
                 }
                 Toast.makeText(
                     context,
@@ -1156,7 +1161,7 @@ fun CurrenciesScreen() {
         val hasRate = code in s.rates.map { it.code }
         ConfirmDialog(
             "Change base currency to $code?",
-            if (hasRate) "Every total will be shown in $code, using today's rate between the two." else "Add $code as a billing currency with a rate first, so totals can be converted.",
+            if (hasRate) "Every total and budget will be shown in $code, using today's rate between the two." else "Add $code as a billing currency with a rate first, so totals can be converted.",
             confirm = if (hasRate) "Change" else "OK",
             danger = false,
             onDismiss = { confirmBase = null },

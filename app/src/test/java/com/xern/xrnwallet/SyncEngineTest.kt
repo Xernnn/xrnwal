@@ -31,6 +31,14 @@ private class FakeServer : SyncServer {
 
     var version = 0L
     var body = ""
+
+    /** This copy's tag, new with every write, and the tags of the copies it was written on top of. */
+    var tag = ""
+    var trail = listOf<String>()
+
+    /** Off for a server from before tags, which goes by version numbers alone. */
+    var tagged = true
+    private var tags = 0
     val history = mutableListOf<Kept>()
     val photos = mutableMapOf<String, ByteArray>()
     var writes = 0
@@ -40,12 +48,32 @@ private class FakeServer : SyncServer {
 
     fun write(text: String) {
         if (version > 0) history += Kept(version, body)
+        trail = if (version == 0L) emptyList() else (trail + tag).filter { it.isNotEmpty() }
         version++
         body = text
+        tag = if (tagged) "tag${++tags}" else ""
         writes++
     }
 
-    private fun copy() = ServerCopy(version, if (version == 0L) "" else sha256(body), body, "2026-11-06T00:00:00+00:00")
+    /** What restoring the server's data from a backup puts back. */
+    data class Saved(val version: Long, val body: String, val tag: String, val trail: List<String>)
+
+    fun saved() = Saved(version, body, tag, trail)
+
+    fun restore(saved: Saved) {
+        version = saved.version
+        body = saved.body
+        tag = saved.tag
+        trail = saved.trail
+    }
+
+    private fun here() = if (version == 0L) "" else tag
+
+    /** A phone's tag only counts when both sides have one. */
+    private fun sameCopy(tag: String) = tag.isEmpty() || here().isEmpty() || tag == here()
+
+    private fun copy(follows: Boolean = true) =
+        ServerCopy(version, if (version == 0L) "" else sha256(body), body, "2026-11-06T00:00:00+00:00", here(), follows)
 
     private fun reach() {
         if (unreachable) throw ServerFailure(0)
@@ -56,22 +84,23 @@ private class FakeServer : SyncServer {
         return copy()
     }
 
-    override fun newerThan(version: Long): ServerCopy? {
+    override fun newerThan(version: Long, tag: String): ServerCopy? {
         reach()
-        return if (version == this.version) null else copy()
+        if (version == this.version && sameCopy(tag)) return null
+        return copy(follows = sameCopy(tag) || tag in trail)
     }
 
-    override fun push(body: String, base: String): PushResult {
+    override fun push(body: String, base: String, tag: String): PushResult {
         reach()
-        if (base != SyncServer.ANY_VERSION && base != version.toString()) {
-            return PushResult.Stale(version, sha256(this.body), "2026-11-06T00:00:00+00:00")
+        if (base != SyncServer.ANY_VERSION && (base != version.toString() || !sameCopy(tag))) {
+            return PushResult.Stale(version, sha256(this.body), "2026-11-06T00:00:00+00:00", here())
         }
         write(body)
         if (loseNextAnswer) {
             loseNextAnswer = false
             throw ServerFailure(0)
         }
-        return PushResult.Accepted(version)
+        return PushResult.Accepted(version, here())
     }
 
     override fun earlierCopies() = history.map { EarlierCopy(it.version.toString(), it.version, "") }
@@ -93,16 +122,19 @@ private class FakeServer : SyncServer {
 /** A wallet whose whole content is a line of text, with photos named after a `|`. */
 private class FakeWallet(private val folder: File, var content: String) : SyncedWallet {
     var replaced = 0
-    var duringDocument: (() -> Unit)? = null
 
-    override suspend fun document(): String {
-        duringDocument?.invoke()
-        return content
-    }
+    /** A bill saved just as a copy is about to replace this one, and one saved just after. Each happens once. */
+    var beforeReplace: (() -> Unit)? = null
+    var afterReplace: (() -> Unit)? = null
 
-    override suspend fun replaceWith(body: String) {
+    override suspend fun document(): String = content
+
+    override suspend fun replaceWith(body: String, expected: String): String? {
+        beforeReplace?.also { beforeReplace = null }?.invoke()
+        if (sha256(content) != expected) return null
         content = body
         replaced++
+        return sha256(content).also { afterReplace?.also { afterReplace = null }?.invoke() }
     }
 
     override fun photosIn(body: String) = body.substringAfter('|', "").split(',').filter { it.isNotEmpty() }
@@ -261,6 +293,56 @@ class SyncEngineTest {
         assertEquals("second", wallet.content)
     }
 
+    @Test fun aServerRestoredAndWrittenBackUpToThisPhonesVersionIsNotTakenForItsCopy() {
+        synced()
+        val backup = server.saved()
+        wallet.content = "lunch"
+        synced()
+        server.restore(backup)
+        otherPhoneWrites("the other phone's dinner")
+        // Version 2 again, but not the version 2 this phone matched.
+        assertConflict(sync())
+        assertEquals("lunch", wallet.content)
+        assertEquals("the other phone's dinner", server.body)
+    }
+
+    @Test fun aChangeHereDoesNotOverwriteWhatWasWrittenSinceTheServerWasRestored() {
+        synced()
+        val backup = server.saved()
+        wallet.content = "lunch"
+        synced()
+        server.restore(backup)
+        otherPhoneWrites("the other phone's dinner")
+        wallet.content = "lunch and a coffee"
+        assertConflict(sync())
+        assertEquals("the other phone's dinner", server.body)
+    }
+
+    @Test fun aServerRestoredAndWrittenPastThisPhonesVersionIsNotFollowedSilently() {
+        synced()
+        val backup = server.saved()
+        wallet.content = "lunch"
+        synced()
+        server.restore(backup)
+        otherPhoneWrites("the other phone's dinner")
+        otherPhoneWrites("the other phone's breakfast")
+        // Only this phone still has lunch, which the restore took off the server.
+        assertConflict(sync())
+        assertEquals("lunch", wallet.content)
+    }
+
+    @Test fun aServerFromBeforeTagsStillSyncsByVersion() {
+        server.tagged = false
+        synced()
+        otherPhoneWrites("from the other phone")
+        assertEquals(SyncOutcome.Downloaded, sync())
+        wallet.content = "and back"
+        assertEquals(SyncOutcome.Uploaded, sync())
+        assertEquals("and back", server.body)
+        assertEquals(SyncOutcome.UpToDate, sync())
+        assertEquals("", meta.meta.tag)
+    }
+
     @Test fun aWipedServerIsFilledAgain() {
         synced()
         server.version = 0
@@ -273,11 +355,20 @@ class SyncEngineTest {
         synced()
         otherPhoneWrites("from the other phone")
         val added = "a bill added just now"
-        var reads = 0
-        wallet.duringDocument = { if (++reads == 2) wallet.content = added }
+        wallet.beforeReplace = { wallet.content = added }
         assertConflict(sync())
         assertEquals(added, wallet.content)
         assertEquals(0, wallet.replaced)
+    }
+
+    @Test fun aBillAddedJustAfterADownloadStillGoesUp() {
+        synced()
+        otherPhoneWrites("from the other phone")
+        val added = "from the other phone, and a bill added just after"
+        wallet.afterReplace = { wallet.content = added }
+        assertEquals(SyncOutcome.Downloaded, sync())
+        assertEquals(SyncOutcome.Uploaded, sync())
+        assertEquals(added, server.body)
     }
 
     @Test fun keepingThePhoneReplacesTheServerAndKeepsItsCopy() = runBlocking {
@@ -299,6 +390,15 @@ class SyncEngineTest {
         assertEquals(SyncOutcome.UpToDate, engine.sync())
     }
 
+    @Test fun aBillAddedWhileKeepingTheServersCopyGoesUpBeforeItIsReplaced() = runBlocking {
+        server.write("the server's")
+        assertConflict(engine.sync())
+        wallet.beforeReplace = { wallet.content = "bills and one added meanwhile" }
+        engine.keepServer()
+        assertEquals("the server's", wallet.content)
+        assertTrue("bills and one added meanwhile" in server.history.map { it.body })
+    }
+
     @Test fun keepingTheServerChangesNothingHereIfThePhonesCopyCantGoUp() = runBlocking {
         server.write("the server's")
         assertConflict(engine.sync())
@@ -307,7 +407,7 @@ class SyncEngineTest {
         val outcome = runCatching {
             // Reachable for the read, then gone for the upload.
             object : SyncServer by server {
-                override fun push(body: String, base: String): PushResult = throw ServerFailure(0)
+                override fun push(body: String, base: String, tag: String): PushResult = throw ServerFailure(0)
             }.let { SyncEngine(it, wallet, meta, { false }).keepServer() }
         }
         assertTrue(outcome.isFailure)
@@ -324,6 +424,49 @@ class SyncEngineTest {
         assertEquals("bills", wallet.content)
         assertEquals("bills", server.body)
         assertTrue("unsynced third" in server.history.map { it.body })
+    }
+
+    @Test fun aBillAddedWhileAnEarlierCopyComesBackGoesUpBeforeItIsReplaced() = runBlocking {
+        engine.sync()
+        wallet.content = "second"
+        engine.sync()
+        wallet.beforeReplace = { wallet.content = "second and one added meanwhile" }
+        assertEquals(SyncOutcome.Uploaded, engine.restoreEarlier("1"))
+        assertEquals("bills", wallet.content)
+        assertTrue("second and one added meanwhile" in server.history.map { it.body })
+    }
+
+    @Test fun aPhoneRestoredFromAFileAsksRatherThanReplacingTheServer() = runBlocking {
+        engine.sync()
+        otherPhoneWrites("bills and the other phone's lunch")
+        assertEquals(SyncOutcome.Downloaded, engine.sync())
+        engine.replaceHere { wallet.content = "last month's backup" }
+        assertConflict(engine.sync())
+        assertConflict(engine.sync())
+        assertEquals("bills and the other phone's lunch", server.body)
+        assertEquals("last month's backup", wallet.content)
+        assertEquals("the last sync time stays", 1000L, meta.meta.syncedAt)
+    }
+
+    @Test fun aRestoredPhoneReplacesTheServerWhenToldTo() = runBlocking {
+        engine.sync()
+        engine.replaceHere { wallet.content = "last month's backup" }
+        assertConflict(engine.sync())
+        assertEquals(SyncOutcome.Uploaded, engine.keepPhone())
+        assertEquals("last month's backup", server.body)
+        assertTrue("bills" in server.history.map { it.body })
+        assertEquals(SyncOutcome.UpToDate, engine.sync())
+    }
+
+    @Test fun aPhoneWithEverythingDeletedCanTakeTheServersCopyBack() = runBlocking {
+        engine.sync()
+        engine.replaceHere { wallet.content = "a fresh wallet" }
+        assertConflict(engine.sync())
+        engine.keepServer()
+        assertEquals("bills", wallet.content)
+        assertEquals("bills", server.body)
+        assertTrue("a fresh wallet" in server.history.map { it.body })
+        assertEquals(SyncOutcome.UpToDate, engine.sync())
     }
 
     @Test fun anEarlierCopyWaitsWhileThePhoneAndServerDiffer() = runBlocking {

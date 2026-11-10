@@ -39,7 +39,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 @Composable
-private fun syncManager(): SyncManager = (LocalContext.current.applicationContext as WalletApp).sync
+fun syncManager(): SyncManager = (LocalContext.current.applicationContext as WalletApp).sync
 
 private val whenFormat = DateTimeFormatter.ofPattern("MMM d h:mm a", Locale.ENGLISH)
 
@@ -137,7 +137,10 @@ private fun ConflictDialog(sync: SyncManager, conflict: SyncOutcome.Conflict) {
             style = MaterialTheme.typography.titleMedium,
         )
         Spacer(Modifier.height(10.dp))
-        Muted("The server's copy is from ${whenText(conflict.updated)}. Choose which to keep. The other one stays on the server under Earlier copies.")
+        Muted(
+            "The server's copy is from ${whenText(conflict.updated)}. Choose which to keep. Your other phones " +
+                "follow the one you keep, and the other stays on the server under Earlier copies.",
+        )
         Spacer(Modifier.height(16.dp))
         PrimaryButton("Use the server's copy", Modifier.fillMaxWidth()) { sync.resolve(useServer = true) }
         Spacer(Modifier.height(8.dp))

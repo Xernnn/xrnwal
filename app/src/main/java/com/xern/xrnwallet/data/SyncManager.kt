@@ -46,7 +46,7 @@ class SyncManager(context: Context, private val repo: Repository, private val sc
 
     private val wallet = object : SyncedWallet {
         override suspend fun document() = repo.syncDocument()
-        override suspend fun replaceWith(body: String) = repo.restore(body, keepLock = true)
+        override suspend fun replaceWith(body: String, expected: String) = repo.replaceIfUnchanged(body, expected)
         override fun photosIn(body: String) = repo.photosIn(body)
         override fun photoFile(name: String) = repo.photoFile(name)
     }
@@ -160,6 +160,36 @@ class SyncManager(context: Context, private val repo: Repository, private val sc
     suspend fun restoreEarlier(id: String) {
         val login = login ?: return
         attempt(login) { it.restoreEarlier(id) }
+    }
+
+    /**
+     * Runs [change], which replaces this phone's data on purpose, such as restoring a file. While
+     * connected, the next sync then asks which copy to keep: see [SyncEngine.replaceHere]. No sync runs
+     * during it, so none can send the result up before this phone has forgotten what it matched, and
+     * like [attempt] it runs in the app's scope, so a screen closing can't stop it halfway.
+     */
+    suspend fun replaceHere(change: suspend () -> Unit) {
+        scope.async(Dispatchers.IO) {
+            lock.withLock {
+                val login = login
+                if (login == null) change() else engine(login).replaceHere(change)
+            }
+        }.await()
+    }
+
+    /**
+     * Runs [work] unless a sync is running, and says whether it ran. For tidying that can wait, like
+     * clearing out unused photos: a download picks which photos to fetch before its bills land, so a
+     * photo it means to use can look unused in between.
+     */
+    suspend fun unlessSyncing(work: suspend () -> Unit): Boolean {
+        if (!lock.tryLock()) return false
+        try {
+            work()
+        } finally {
+            lock.unlock()
+        }
+        return true
     }
 
     private companion object {

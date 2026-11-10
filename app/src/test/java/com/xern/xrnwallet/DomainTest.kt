@@ -5,8 +5,11 @@ import com.xern.xrnwallet.data.Bill
 import com.xern.xrnwallet.data.BillCsv
 import com.xern.xrnwallet.data.BillType
 import com.xern.xrnwallet.data.Budget
+import com.xern.xrnwallet.data.Category
 import com.xern.xrnwallet.data.CurrencyRate
 import com.xern.xrnwallet.data.Ledger
+import com.xern.xrnwallet.data.PhotoFiles
+import com.xern.xrnwallet.data.Rebased
 import com.xern.xrnwallet.data.Recurring
 import com.xern.xrnwallet.data.SavingsDeposit
 import com.xern.xrnwallet.data.SavingsPlan
@@ -28,10 +31,15 @@ import com.xern.xrnwallet.domain.RepeatUnit
 import com.xern.xrnwallet.domain.Savings
 import com.xern.xrnwallet.domain.SeparatorStyle
 import com.xern.xrnwallet.domain.WeekendRule
+import com.xern.xrnwallet.ui.AppUi
+import com.xern.xrnwallet.ui.BillStart
 import com.xern.xrnwallet.ui.Fmt
 import com.xern.xrnwallet.ui.accountLogo
+import com.xern.xrnwallet.ui.billStart
+import com.xern.xrnwallet.ui.currencyChoices
 import com.xern.xrnwallet.ui.firstSteps
 import com.xern.xrnwallet.work.WidgetFigures
+import java.io.File
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
@@ -40,9 +48,13 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 
 class DomainTest {
+    @get:Rule val folder = TemporaryFolder()
+
     private val format = MoneyFormat(SeparatorStyle.DOT_COMMA, DecimalMode.ADAPTIVE)
 
     private fun bill(
@@ -150,6 +162,40 @@ class DomainTest {
     }
 
     @Test
+    fun aWeekendCanMoveADateTwoMonthsFromItsCalendarMonth() {
+        // 2026-02-28 is a Saturday, so with Backward February starts on Mar 2 and March 1 is still January's.
+        val backward = PeriodRules(startDay = 28, weekend = WeekendRule.LATER)
+        assertEquals(YearMonth.of(2026, 1), backward.monthOf(LocalDate.of(2026, 3, 1)))
+        // 2026-11-01 is a Sunday, so with Forward November starts on Oct 30, labelled December.
+        val forward = PeriodRules(startDay = 1, weekend = WeekendRule.EARLIER, belonging = Belonging.END_MONTH)
+        assertEquals(YearMonth.of(2026, 12), forward.monthOf(LocalDate.of(2026, 10, 30)))
+    }
+
+    @Test
+    fun everyDayBelongsToExactlyOneMonthWhateverTheSettings() {
+        val first = LocalDate.of(2024, 1, 1)
+        val last = LocalDate.of(2032, 12, 31)
+        for (startDay in 1..28) for (weekend in WeekendRule.entries) for (belonging in Belonging.entries) {
+            val rules = PeriodRules(startDay = startDay, weekend = weekend, belonging = belonging)
+            var date = first
+            while (date <= last) {
+                val calendar = YearMonth.from(date)
+                val holding = (-3L..3L).map { calendar.plusMonths(it) }.filter { date in rules.monthRange(it) }
+                assertEquals("$date in $rules", listOf(rules.monthOf(date)), holding)
+                date = date.plusDays(1)
+            }
+        }
+    }
+
+    @Test
+    fun homeAndReportsOpenOnTheAccountingMonthOfToday() {
+        // With Start of Month 15, November 9 is still in October's month, as the widget and Budget say.
+        val ui = AppUi(LocalDate.of(2026, 11, 9), PeriodRules(startDay = 15))
+        assertEquals(Period.Month(YearMonth.of(2026, 10)), ui.homePeriod)
+        assertEquals(Period.Month(YearMonth.of(2026, 10)), ui.reportPeriod)
+    }
+
+    @Test
     fun weekendRuleMovesStart() {
         // 2026-11-01 is a Sunday.
         val earlier = PeriodRules(weekend = WeekendRule.EARLIER)
@@ -240,6 +286,68 @@ class DomainTest {
         assertEquals(490_000_000L, snapshot.balance(abroad))
         assertEquals(27288L, snapshot.balanceInBase(abroad))
         assertEquals(7212L, snapshot.bills.totals().expense)
+    }
+
+    @Test
+    fun aNewBillStartsInTheCurrencyOfItsAccount() {
+        val cash = Account(id = 1, name = "Cash", currency = "AUD")
+        val card = Account(id = 2, name = "US card", currency = "USD")
+        val s = Snapshot(
+            accounts = listOf(cash, card),
+            rates = listOf(CurrencyRate("USD", 1.53)),
+            bills = listOf(bill(LocalDate.of(2026, 11, 8), 1500, account = 2, currency = "USD", rate = 1.53)),
+        )
+        // Typing 20 on the US card must record US$20, not A$20.
+        assertEquals(BillStart(2, "USD"), s.billStart("AUD"))
+        assertEquals(BillStart(1, "AUD"), s.copy(bills = emptyList()).billStart("AUD"))
+        assertEquals(BillStart(null, "EUR"), Snapshot().billStart("EUR"))
+    }
+
+    @Test
+    fun moneyIsOnlyKeptInCurrenciesWithARate() {
+        // With no VND rate, a VND account holding 25,000,000 would add A$25M to net assets.
+        val s = Snapshot(rates = listOf(CurrencyRate("USD", 1.53), CurrencyRate("EUR", 1.78)))
+        assertEquals(listOf("AUD", "USD", "EUR"), s.currencyChoices("AUD"))
+    }
+
+    @Test
+    fun aCategoryIsInUseWhileAnythingUsesItOrItsSubcategories() {
+        val food = Category(id = 1, type = BillType.EXPENSE, name = "Food", icon = "🍔")
+        val groceries = Category(id = 2, type = BillType.EXPENSE, name = "Groceries", icon = "🛒", parentId = 1)
+        val travel = Category(id = 3, type = BillType.EXPENSE, name = "Travel", icon = "✈️")
+        val s = Snapshot(
+            categories = listOf(food, groceries, travel),
+            bills = listOf(bill(LocalDate.of(2026, 11, 2), 4500).copy(categoryId = 2)),
+        )
+        // Deleting Food takes Groceries with it, which would leave that bill Uncategorised for good.
+        assertTrue(s.categoryInUse(food))
+        assertTrue(s.categoryInUse(groceries))
+        assertFalse(s.categoryInUse(travel))
+        val rule = Recurring(ledgerId = 1, type = BillType.EXPENSE, categoryId = 3, amountCents = 900, currency = "AUD", startEpochDay = 0)
+        assertTrue(s.copy(recurring = listOf(rule)).categoryInUse(travel))
+    }
+
+    @Test
+    fun changingTheBaseConvertsBudgetsAndKeepsBillsAlreadyInItAsTheyAre() {
+        // A euro is A$1.65 today. It was A$1.50 when the euro bill was recorded.
+        val day = LocalDate.of(2026, 10, 5)
+        val rebased = Rebased.of(
+            previous = "AUD",
+            code = "EUR",
+            bills = listOf(
+                bill(day, 10000, currency = "EUR", rate = 1.50),
+                bill(day, 16500),
+                bill(day, 1000, currency = "USD", rate = 1.53),
+            ),
+            rates = listOf(CurrencyRate("EUR", 1.65), CurrencyRate("USD", 1.53, 1)),
+            budgets = listOf(Budget(id = 1, amountCents = 82500), Budget(id = 2, categoryId = 5, amountCents = 16500)),
+        )!!
+        // €100 counts as €100, not €91. The others keep their rate, rescaled as before.
+        assertEquals(listOf(10000L, 10000L, 927L), rebased.bills.map { it.baseCents })
+        assertEquals(listOf(50000L, 10000L), rebased.budgets.map { it.amountCents })
+        assertEquals(listOf("USD", "AUD"), rebased.rates.map { it.code })
+        assertEquals(1 / 1.65, rebased.rates.last().rate, 1e-12)
+        assertNull(Rebased.of("AUD", "JPY", rebased.bills, rebased.rates, rebased.budgets))
     }
 
     @Test
@@ -403,6 +511,53 @@ class DomainTest {
         val tenDays = Period.Custom(LocalDate.of(2026, 3, 1), LocalDate.of(2026, 3, 10))
         assertEquals(Period.Custom(LocalDate.of(2026, 3, 11), LocalDate.of(2026, 3, 20)), tenDays.shifted(1))
         assertEquals(Period.Custom(LocalDate.of(2026, 2, 19), LocalDate.of(2026, 2, 28)), tenDays.shifted(-1))
+    }
+
+    @Test
+    fun aRuleRecordsWhatIsDueButNothingOnceItsLedgerIsGone() {
+        // 2026-11-01 is a Sunday.
+        val weekly = Recurring(
+            ledgerId = 2,
+            type = BillType.EXPENSE,
+            amountCents = 5000,
+            currency = "AUD",
+            startEpochDay = LocalDate.of(2026, 11, 1).toEpochDay(),
+            repeatKind = RepeatKind.WEEKLY.name,
+            repeatValue = 7,
+            times = 0,
+        )
+        val now = LocalDate.of(2026, 11, 16).atTime(9, 0)
+        val sundays = listOf(1, 8, 15).map { LocalDate.of(2026, 11, it).atTime(8, 0) }
+        assertEquals(sundays, weekly.due(now, setOf(1L, 2L)))
+        assertEquals(sundays.drop(1), weekly.copy(generated = 1).due(now, setOf(2L)))
+        assertEquals(sundays.take(2), weekly.copy(times = 2).due(now, setOf(2L)))
+        // Its ledger was deleted: bills there would count in every total but show in no ledger.
+        assertEquals(emptyList<java.time.LocalDateTime>(), weekly.due(now, setOf(1L)))
+    }
+
+    @Test
+    fun photosNoBillNamesAreClearedOutOnceADayOld() {
+        val now = 1_800_000_000_000L
+        fun photo(name: String, ageMillis: Long) =
+            folder.newFile(name).apply { writeBytes(byteArrayOf(1)); setLastModified(now - ageMillis) }
+        val day = 24 * 60 * 60 * 1000L
+        val named = photo("named.jpg", 30 * day)
+        val shared = photo("shared.jpg", 30 * day)
+        val deleted = photo("deleted.jpg", 30 * day)
+        val picked = photo("picked.jpg", 60_000)
+        val receipt = bill(LocalDate.of(2026, 11, 2), 1200)
+        val bills = listOf(
+            receipt.copy(id = 1, photo = named.absolutePath),
+            // Add again for today copies the bill, photo and all, so two bills can name one file.
+            receipt.copy(id = 2, photo = shared.absolutePath),
+            receipt.copy(id = 3, photo = shared.absolutePath),
+        )
+        assertEquals(listOf("deleted.jpg"), PhotoFiles.sweep(folder.root, bills, now))
+        assertFalse(deleted.exists())
+        // Just picked for a bill not saved yet.
+        assertTrue(picked.exists())
+        assertTrue(named.exists() && shared.exists())
+        assertEquals(emptyList<String>(), PhotoFiles.sweep(File(folder.root, "none yet"), bills, now))
     }
 
     @Test

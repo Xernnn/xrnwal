@@ -13,6 +13,7 @@ import time
 import unittest
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from http.server import ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -21,6 +22,10 @@ srv = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(srv)
 
 RIGHT = "secret"
+
+
+class LoopbackServer(ThreadingHTTPServer):
+    request_queue_size = 64  # room for requests sent side by side, so none waits to connect
 
 
 def document(*notes, photo=None):
@@ -43,7 +48,7 @@ class SyncServerTest(unittest.TestCase):
         srv.failures.clear()
         srv.pruned.clear()
         srv.auth_cache.clear()
-        self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), srv.Handler)
+        self.httpd = LoopbackServer(("127.0.0.1", 0), srv.Handler)
         self.httpd.daemon_threads = True
         self.base = f"http://127.0.0.1:{self.httpd.server_address[1]}"
         threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
@@ -108,6 +113,56 @@ class SyncServerTest(unittest.TestCase):
         self.put(document("a"), '"0"')
         self.assertEqual(self.call("GET", "/state", headers={"If-None-Match": '"1"'})[0], 304)
         self.assertEqual(self.call("GET", "/state", headers={"If-None-Match": '"0"'})[0], 200)
+
+    def state_file(self):
+        return os.path.join(self.data, "users", "owner", "state.json")
+
+    def test_every_write_gets_a_tag_of_its_own(self):
+        _, _, first = self.put(document("a"), '"0"')
+        _, _, second = self.put(document("b"), '"1"')
+        self.assertTrue(first["X-Tag"])
+        self.assertNotEqual(first["X-Tag"], second["X-Tag"])
+        self.assertEqual(self.call("GET", "/state")[2]["X-Tag"], second["X-Tag"])
+
+    def test_a_copy_written_on_top_of_the_phones_follows_it(self):
+        _, _, first = self.put(document("one"), '"0"')
+        seen = {"If-None-Match": '"1"', "X-Base-Tag": first["X-Tag"]}
+        self.assertEqual(self.call("GET", "/state", headers=seen)[0], 304)
+        self.put(document("two"), '"1"')
+        status, _, headers = self.call("GET", "/state", headers=seen)
+        self.assertEqual((status, headers["X-Follows"]), (200, "1"))
+
+    def test_after_a_restore_here_the_same_version_is_not_taken_for_the_phones_copy(self):
+        self.put(document("one"), '"0"')
+        with open(self.state_file()) as f:
+            backup = f.read()
+        _, _, mine = self.put(document("two, from this phone"), '"1"')
+        with open(self.state_file(), "w") as f:
+            f.write(backup)  # the data here restored from a backup
+        self.put(document("two, from the other phone"), '"1"')
+        status, _, headers = self.call("GET", "/state", headers={"If-None-Match": '"2"', "X-Base-Tag": mine["X-Tag"]})
+        self.assertEqual((status, headers["X-Follows"]), (200, "0"))
+        status = self.call("PUT", "/state", document("three"), {"If-Match": '"2"', "X-Base-Tag": mine["X-Tag"]})[0]
+        self.assertEqual(status, 412)
+        self.assertEqual(json.loads(self.call("GET", "/state")[1])["bills"][0]["note"], "two, from the other phone")
+
+    def test_a_phone_that_sends_no_tag_is_answered_by_version_as_before(self):
+        self.put(document("one"), '"0"')
+        self.assertEqual(self.call("GET", "/state", headers={"If-None-Match": '"1"'})[0], 304)
+        self.put(document("two"), '"1"')
+        _, _, headers = self.call("GET", "/state", headers={"If-None-Match": '"1"'})
+        self.assertIsNone(headers["X-Follows"])
+        self.assertEqual(self.put(document("three"), '"2"')[0], 200)
+
+    def test_a_copy_from_before_tags_is_matched_by_version_alone(self):
+        os.makedirs(os.path.dirname(self.state_file()))
+        with open(self.state_file(), "w") as f:
+            json.dump({"version": 3, "updated": "", "sha256": "", "data": document("from the old server")}, f)
+        tagged = {"If-None-Match": '"3"', "X-Base-Tag": "from-a-later-copy"}
+        self.assertEqual(self.call("GET", "/state", headers=tagged)[0], 304)
+        status, _, headers = self.call("PUT", "/state", document("next"), {"If-Match": '"3"', "X-Base-Tag": "from-a-later-copy"})
+        self.assertEqual(status, 200)
+        self.assertTrue(headers["X-Tag"])
 
     def test_only_a_document_with_bills_is_taken(self):
         self.assertEqual(self.put({"items": []}, '"0"')[0], 400)
@@ -221,6 +276,23 @@ class SyncServerTest(unittest.TestCase):
         status, _, headers = self.call("GET", "/state", password=RIGHT)
         self.assertEqual(status, 429)
         self.assertTrue(headers["Retry-After"])
+
+    def test_wrong_passwords_sent_side_by_side_get_no_more_tries(self):
+        real = srv.check_login
+
+        def slow(header):  # as bcrypt is, which is when the others arrive
+            time.sleep(0.5)
+            return real(header)
+
+        srv.check_login = slow
+        try:
+            tries = srv.FAIL_LIMIT * 3
+            with ThreadPoolExecutor(tries) as pool:
+                codes = list(pool.map(lambda _: self.call("GET", "/state", password="wrong")[0], range(tries)))
+        finally:
+            srv.check_login = real
+        self.assertEqual((codes.count(401), codes.count(429)), (srv.FAIL_LIMIT, tries - srv.FAIL_LIMIT))
+        self.assertEqual(self.call("GET", "/state", password=RIGHT)[0], 429)
 
     def test_users_do_not_see_each_others_copies(self):
         self.put(document("mine"), '"0"')

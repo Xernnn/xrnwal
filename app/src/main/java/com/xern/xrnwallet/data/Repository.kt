@@ -2,6 +2,7 @@ package com.xern.xrnwallet.data
 
 import android.content.Context
 import androidx.room.withTransaction
+import com.xern.xrnwallet.domain.Money
 import com.xern.xrnwallet.work.Reminders
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -46,6 +47,44 @@ data class Backup(
     /** Base64 image data by file name, so a backup restores completely on another phone. */
     val photos: Map<String, String> = emptyMap(),
 )
+
+object PhotoFiles {
+    /** As the server's own grace: a photo just picked for a bill not saved yet, or just come down, stays. */
+    private const val GRACE_MILLIS = 24 * 60 * 60 * 1000L
+
+    /**
+     * Deletes the files in [folder] that no bill names, and returns their names. Deleting a bill,
+     * removing or replacing its photo, leaving an edit unsaved and restoring each leave one behind.
+     * Only files at least a day old go.
+     */
+    fun sweep(folder: File, bills: List<Bill>, now: Long): List<String> {
+        val named = bills.mapNotNullTo(HashSet()) { bill -> bill.photo?.let { File(it).name } }
+        return folder.listFiles().orEmpty()
+            .filter { it.isFile && it.name !in named && now - it.lastModified() >= GRACE_MILLIS && it.delete() }
+            .map { it.name }
+    }
+}
+
+/** The rows a change of base currency rewrites. */
+data class Rebased(val bills: List<Bill>, val rates: List<CurrencyRate>, val budgets: List<Budget>) {
+    companion object {
+        /**
+         * Moves the base from [previous] to [code], or null when [code] has no rate. Each bill's own
+         * rate is rescaled, so converted history stays consistent instead of being revalued, except a
+         * bill already in [code], which is now simply in the base. Budgets are sums of the base, so they
+         * are converted at today's rate, as balances are.
+         */
+        fun of(previous: String, code: String, bills: List<Bill>, rates: List<CurrencyRate>, budgets: List<Budget>): Rebased? {
+            val pivot = rates.firstOrNull { it.code == code }?.rate ?: return null
+            val rebased = rates.filter { it.code != code }.map { it.copy(rate = it.rate / pivot) }
+            return Rebased(
+                bills = bills.map { it.copy(rate = if (it.currency == code) 1.0 else it.rate / pivot) },
+                rates = rebased + CurrencyRate(previous, 1.0 / pivot, rebased.size),
+                budgets = budgets.map { it.copy(amountCents = Money.convert(it.amountCents, 1.0 / pivot)) },
+            )
+        }
+    }
+}
 
 class Repository(
     private val context: Context,
@@ -132,10 +171,12 @@ class Repository(
 
     fun save(block: suspend AppDao.() -> Unit) = launchIo { dao.block() }
 
+    /** Its recurring items go too, as they would only ever record into a ledger that isn't there. */
     fun deleteLedger(ledger: Ledger) = launchIo {
         db.withTransaction {
             dao.deleteBillTagsOfLedger(ledger.id)
             dao.deleteBillsOfLedger(ledger.id)
+            dao.deleteRecurringOfLedger(ledger.id)
             dao.delete(ledger)
         }
         store.update { if (it.activeLedger == ledger.id) it.copy(activeLedger = ALL_LEDGERS) else it }
@@ -186,16 +227,11 @@ class Repository(
     suspend fun runRecurring(now: LocalDateTime = LocalDateTime.now()) {
         db.withTransaction {
             val knownTags = dao.tagsNow().map { it.id }.toSet()
+            val ledgers = dao.ledgersNow().mapTo(HashSet()) { it.id }
             dao.recurringNow().forEach { rule ->
-                var made = rule.generated
-                while (rule.times == 0 || made < rule.times) {
-                    val at = rule.rule.occurrence(rule.start, made)
-                        .atTime(rule.minuteOfDay / 60, rule.minuteOfDay % 60)
-                    if (at.isAfter(now)) break
-                    addRuleBill(rule, at, knownTags)
-                    made++
-                }
-                if (made != rule.generated) dao.put(rule.copy(generated = made))
+                val due = rule.due(now, ledgers)
+                due.forEach { addRuleBill(rule, it, knownTags) }
+                if (due.isNotEmpty()) dao.put(rule.copy(generated = rule.generated + due.size))
             }
         }
     }
@@ -352,29 +388,28 @@ class Repository(
      * What the home server keeps: a backup with the app lock left out and photos named rather than
      * included. Rows are in a fixed order, because the sync compares this text to see what changed.
      */
-    suspend fun syncDocument(): String = withContext(Dispatchers.IO) {
-        db.withTransaction {
-            json.encodeToString(
-                Backup(
-                    settings = store.exportWithoutLock(),
-                    ledgers = dao.ledgersNow().sortedBy { it.id },
-                    accounts = dao.accountsNow().sortedBy { it.id },
-                    categories = dao.categoriesNow().sortedBy { it.id },
-                    tags = dao.tagsNow().sortedBy { it.id },
-                    bills = dao.billsNow().sortedBy { it.id }.map { it.copy(photo = it.photo?.let(::File)?.name) },
-                    billTags = dao.billTagsNow().sortedWith(compareBy({ it.billId }, { it.tagId })),
-                    budgets = dao.budgetsNow().sortedBy { it.id },
-                    recurring = dao.recurringNow().sortedBy { it.id },
-                    plans = dao.plansNow().sortedBy { it.id },
-                    deposits = dao.depositsNow().sortedBy { it.id },
-                    checklists = dao.checklistsNow().sortedBy { it.id },
-                    checklistItems = dao.checklistItemsNow().sortedBy { it.id },
-                    reminders = dao.remindersNow().sortedBy { it.id },
-                    rates = dao.ratesNow().sortedBy { it.code },
-                ),
-            )
-        }
-    }
+    suspend fun syncDocument(): String = withContext(Dispatchers.IO) { db.withTransaction { document() } }
+
+    /** [syncDocument] inside a transaction already open. */
+    private suspend fun document(): String = json.encodeToString(
+        Backup(
+            settings = store.exportWithoutLock(),
+            ledgers = dao.ledgersNow().sortedBy { it.id },
+            accounts = dao.accountsNow().sortedBy { it.id },
+            categories = dao.categoriesNow().sortedBy { it.id },
+            tags = dao.tagsNow().sortedBy { it.id },
+            bills = dao.billsNow().sortedBy { it.id }.map { it.copy(photo = it.photo?.let(::File)?.name) },
+            billTags = dao.billTagsNow().sortedWith(compareBy({ it.billId }, { it.tagId })),
+            budgets = dao.budgetsNow().sortedBy { it.id },
+            recurring = dao.recurringNow().sortedBy { it.id },
+            plans = dao.plansNow().sortedBy { it.id },
+            deposits = dao.depositsNow().sortedBy { it.id },
+            checklists = dao.checklistsNow().sortedBy { it.id },
+            checklistItems = dao.checklistItemsNow().sortedBy { it.id },
+            reminders = dao.remindersNow().sortedBy { it.id },
+            rates = dao.ratesNow().sortedBy { it.code },
+        ),
+    )
 
     /** The photo files a server copy names, leaving out any name that isn't a plain file name. */
     fun photosIn(body: String): List<String> =
@@ -383,11 +418,26 @@ class Repository(
 
     fun photoFile(name: String): File = File(File(context.filesDir, "photos"), name)
 
+    /** Clears out the photo files no bill names any more. */
+    suspend fun sweepPhotos() = withContext(Dispatchers.IO) {
+        PhotoFiles.sweep(File(context.filesDir, "photos"), dao.billsNow(), System.currentTimeMillis())
+    }
+
+    /** Replaces everything with a backup file, app lock included. */
+    suspend fun restore(text: String) {
+        replace(text, keepLock = false, expected = null)
+    }
+
+    /** For [SyncedWallet.replaceWith]: a server copy, which leaves the app lock out, so this phone keeps its own. */
+    suspend fun replaceIfUnchanged(text: String, expected: String): String? = replace(text, keepLock = true, expected)
+
     /**
-     * Replaces everything with a backup. The file is fully parsed before anything is deleted.
-     * [keepLock] is for server copies, which leave the app lock out: this phone keeps its own.
+     * Replaces everything with a backup and returns the hash of the new [syncDocument]. The file is
+     * fully parsed before anything is deleted. With [expected], only while the document here still
+     * hashes to it, else null with nothing replaced. The check, the change and the new hash are one
+     * transaction, so a bill saved meanwhile waits for it and lands after, still to be sent.
      */
-    suspend fun restore(text: String, keepLock: Boolean = false) = withContext(Dispatchers.IO) {
+    private suspend fun replace(text: String, keepLock: Boolean, expected: String?): String? = withContext(Dispatchers.IO) {
         val backup = json.decodeFromString<Backup>(text)
         // This app would drop what it can't read, then send that back to the server without it.
         check(backup.version <= BACKUP_VERSION) { "Made by a newer version of the app" }
@@ -396,7 +446,8 @@ class Repository(
         val folder = File(context.filesDir, "photos").apply { mkdirs() }
         // Names come from the file, so only the last part of each is ever used as a path.
         photos.forEach { (name, bytes) -> File(folder, File(name).name).writeBytes(bytes) }
-        db.withTransaction {
+        val hash = db.withTransaction {
+            if (expected != null && sha256(document()) != expected) return@withTransaction null
             dao.clearEverything()
             dao.putLedgers(backup.ledgers)
             dao.putAccounts(backup.accounts)
@@ -412,9 +463,11 @@ class Repository(
             dao.putChecklistItems(backup.checklistItems)
             dao.putReminders(backup.reminders)
             dao.putRates(backup.rates)
-        }
-        if (keepLock) store.restoreKeepingLock(backup.settings) else store.restore(backup.settings)
+            if (keepLock) store.restoreKeepingLock(backup.settings) else store.restore(backup.settings)
+            sha256(document())
+        } ?: return@withContext null
         Reminders.scheduleAll(context, backup.reminders)
+        hash
     }
 
     suspend fun deleteEverything() = withContext(Dispatchers.IO) {
@@ -424,20 +477,19 @@ class Repository(
         seedIfEmpty()
     }
 
-    /**
-     * Re-expresses everything against a new base. [code] must already have a rate. Each bill's own
-     * rate is rescaled, so converted history stays consistent instead of being revalued.
-     */
+    /** Re-expresses everything against a new base. [code] must already have a rate. See [Rebased]. */
     suspend fun changeBase(code: String) = withContext(Dispatchers.IO) {
         val previous = store.settings.value.baseCurrency
-        val pivot = dao.ratesNow().firstOrNull { it.code == code }?.rate ?: return@withContext
-        db.withTransaction {
-            dao.putBills(dao.billsNow().map { it.copy(rate = it.rate / pivot) })
-            val rebased = dao.ratesNow().filter { it.code != code }.map { it.copy(rate = it.rate / pivot) }
+        val changed = db.withTransaction {
+            val rebased = Rebased.of(previous, code, dao.billsNow(), dao.ratesNow(), dao.budgetsNow())
+                ?: return@withTransaction false
+            dao.putBills(rebased.bills)
             dao.clearRates()
-            dao.putRates(rebased + CurrencyRate(previous, 1.0 / pivot, rebased.size))
+            dao.putRates(rebased.rates)
+            dao.putBudgets(rebased.budgets)
+            true
         }
-        store.update { it.copy(baseCurrency = code) }
+        if (changed) store.update { it.copy(baseCurrency = code) }
     }
 
     /** Fetches public rates for the base currency. Only ever called from the refresh button. */

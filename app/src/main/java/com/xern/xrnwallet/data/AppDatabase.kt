@@ -98,6 +98,7 @@ interface AppDao {
     @Query("DELETE FROM Bill WHERE ledgerId = :ledgerId") suspend fun deleteBillsOfLedger(ledgerId: Long)
     @Query("DELETE FROM BillTag WHERE billId IN (SELECT id FROM Bill WHERE ledgerId = :ledgerId)")
     suspend fun deleteBillTagsOfLedger(ledgerId: Long)
+    @Query("DELETE FROM Recurring WHERE ledgerId = :ledgerId") suspend fun deleteRecurringOfLedger(ledgerId: Long)
     @Query("DELETE FROM Budget WHERE categoryId = :categoryId") suspend fun deleteCategoryBudget(categoryId: Long)
     @Query("DELETE FROM ChecklistItem WHERE checklistId = :id") suspend fun deleteItemsOf(id: Long)
     @Query("DELETE FROM SavingsDeposit WHERE planId = :id") suspend fun deleteDepositsOf(id: Long)

@@ -79,7 +79,8 @@ Transfers appear in account history as "From >> To" and count in neither expense
   PayPal, Google Wallet, Amazon Pay, Apple. Investment and Cash get their own marks. The name is the only
   setup, so imported and restored accounts show theirs too.
 - Accounts grouped by type. Foreign accounts show native balance plus base-currency value.
-- Create account: type picker, Current balance, Currency, Notes, Included in total assets.
+- Create account: type picker, Current balance, Currency (billing currencies only), Notes, Included in
+  total assets.
 - Types. Savings: PayPal, Google Wallet, Amazon Pay, Cash, Apple Card, Bank Card (custom name and
   icon), Other (custom). Credit: Apple Card, Debt, Credit Card (custom), Other (custom).
 - Detail: icon, name, Included in total assets chip, Current balance, history including transfers.
@@ -275,8 +276,10 @@ otherwise:
 | Situation | What happens |
 | --- | --- |
 | A new phone connects to a server that has a copy | It asks which to keep |
+| This phone was restored from a file, or had all its data deleted | It asks which to keep, as a new phone does |
 | Both sides changed | It asks which to keep |
 | The server went backwards, restored from a backup say | It asks which to keep |
+| The server went backwards and was written to again, to this phone's version or past it | It asks which to keep, as each copy has a tag of its own |
 | An upload arrived but its answer was lost | It recognises its own upload by hash and carries on |
 | The server lost everything | It sends this phone's copy again |
 | A bill is added while a copy is downloading | It asks which to keep, and the bill stays |

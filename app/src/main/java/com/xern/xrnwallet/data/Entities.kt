@@ -146,6 +146,22 @@ data class Recurring(
     fun dates(from: Int, until: Int): List<LocalDate> = (from until until).map { rule.occurrence(start, it) }
 
     /**
+     * When the steps due by [now] and not yet recorded fall. None while the rule's ledger isn't among
+     * [ledgers], as when it was deleted by an older build that kept its rules: bills recorded there
+     * would count in every total but show in no ledger.
+     */
+    fun due(now: LocalDateTime, ledgers: Set<Long>): List<LocalDateTime> {
+        if (ledgerId !in ledgers) return emptyList()
+        val due = ArrayList<LocalDateTime>()
+        while (times == 0 || generated + due.size < times) {
+            val at = rule.occurrence(start, generated + due.size).atTime(minuteOfDay / 60, minuteOfDay % 60)
+            if (at.isAfter(now)) break
+            due += at
+        }
+        return due
+    }
+
+    /**
      * The bill already recorded for each of [dates], such as those imported from another app, by date.
      * It must match what the rule would write, with two allowances. It may sit a day off, because an app
      * counting 24-hour days drifts a day across daylight saving. It may be on another account, because

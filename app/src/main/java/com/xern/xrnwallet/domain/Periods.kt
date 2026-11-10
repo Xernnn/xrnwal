@@ -44,11 +44,16 @@ data class PeriodRules(
         return DateRange(anchor(first), anchor(first.plusMonths(1)).minusDays(1))
     }
 
-    /** The accounting month that contains [date]. */
+    /**
+     * The accounting month that contains [date]. Months start in order and each ends where the next
+     * begins, so there is always exactly one. It walks to it, because a weekend can move a start into
+     * the calendar month before or after, putting a date up to two months from its own.
+     */
     fun monthOf(date: LocalDate): YearMonth {
-        val calendar = YearMonth.from(date)
-        return listOf(calendar.plusMonths(1), calendar, calendar.minusMonths(1))
-            .first { date in monthRange(it) }
+        var first = YearMonth.from(date)
+        while (anchor(first) > date) first = first.minusMonths(1)
+        while (anchor(first.plusMonths(1)) <= date) first = first.plusMonths(1)
+        return if (belonging == Belonging.START_MONTH) first else first.plusMonths(1)
     }
 
     fun weekRange(date: LocalDate): DateRange {
