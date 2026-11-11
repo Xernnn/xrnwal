@@ -140,6 +140,7 @@ fun Snapshot.billStart(base: String): BillStart {
 fun BillEditScreen(id: Long, date: Long, initialType: Int) {
     val s = snap()
     val settings = prefs()
+    val f = fmt()
     val nav = LocalNav.current
     val repo = LocalRepo.current
     val context = LocalContext.current
@@ -441,7 +442,7 @@ fun BillEditScreen(id: Long, date: Long, initialType: Int) {
             numeric = true,
             onDismiss = { dialog = null },
         ) {
-            feeCents = Money.parse(it) ?: 0
+            feeCents = f.parse(it, currency) ?: 0
             dialog = null
         }
         "sub" -> {

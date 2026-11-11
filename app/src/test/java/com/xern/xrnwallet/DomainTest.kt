@@ -117,6 +117,33 @@ class DomainTest {
     }
 
     @Test
+    fun aTypedAmountFollowsTheChosenDecimalMarkAndTheDongHasNoCents() {
+        // The default format, $1.000,01: a point marks thousands.
+        assertEquals(50_000_000L, Money.parse("500.000", decimalMark = ','))
+        assertEquals(150_000L, Money.parse("1.500", decimalMark = ','))
+        assertEquals(-150_000L, Money.parse("-1.500", decimalMark = ','))
+        assertEquals(50_000L, Money.parse("500,000", decimalMark = ','))
+        // $1,000.01, the other way round.
+        assertEquals(150_000L, Money.parse("1,500", decimalMark = '.'))
+        assertEquals(150L, Money.parse("1.500", decimalMark = '.'))
+        // The dong has no cents, so three digits after either mark are thousands.
+        assertEquals(50_000_000L, Money.parse("500,000", decimalMark = ',', wholeUnits = true))
+        assertEquals(50_000_000L, Money.parse("500.000", decimalMark = '.', wholeUnits = true))
+        assertEquals(Money.parse("500.000", decimalMark = ',', wholeUnits = Money.wholeUnits("VND")), Money.parse("500,000", decimalMark = ',', wholeUnits = Money.wholeUnits("VND")))
+        assertEquals(listOf(true, true, false, false), listOf("VND", "JPY", "AUD", "QQQ").map(Money::wholeUnits))
+        // What never could be thousands reads as it did, such as a field filled in with an amount.
+        assertEquals(1250L, Money.parse("12.5", decimalMark = ','))
+        assertEquals(123450L, Money.parse("1234.50", decimalMark = ','))
+        assertEquals(123457L, Money.parse("1234.567", decimalMark = ','))
+        assertEquals(123450L, Money.parse("1.234,50", decimalMark = ','))
+        assertEquals(50L, Money.parse("0.500", decimalMark = ','))
+        assertEquals(150000000L, Money.parse("1.500.000", decimalMark = '.'))
+        // A file says nothing of its marks, so it reads as before.
+        assertEquals(50_000L, Money.parse("500.000"))
+        assertEquals(150L, Money.parse("1,500"))
+    }
+
+    @Test
     fun aNumberTooLargeForAnAmountIsRefusedNotThrown() {
         assertNull(Money.parse("99999999999999999999"))
         assertNull(Money.parse("1e30"))

@@ -203,6 +203,7 @@ fun AccountDetailScreen(id: Long) {
 fun AccountEditScreen(id: Long) {
     val s = snap()
     val settings = prefs()
+    val f = fmt()
     val nav = LocalNav.current
     val repo = LocalRepo.current
     val context = LocalContext.current
@@ -275,7 +276,7 @@ fun AccountEditScreen(id: Long) {
                     Toast.makeText(context, "Please enter a name", Toast.LENGTH_SHORT).show()
                     return@PrimaryButton
                 }
-                val wanted = Money.parse(balance.ifBlank { "0" }) ?: 0
+                val wanted = f.parse(balance.ifBlank { "0" }, currency) ?: 0
                 val base = existing ?: Account(name = name.trim(), sort = s.accounts.size)
                 // What bills fixed in its old currency put there is re-expressed in the new one.
                 val refixed = existing?.let { s.fixedAmountsIn(it, currency) }.orEmpty().associateBy { it.id }

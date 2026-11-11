@@ -435,6 +435,7 @@ private fun FilterPanel(options: List<Pair<Long, String>>, chosen: Set<Long>, on
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun AmountDialog(query: BillQuery, onDismiss: () -> Unit, onChange: (BillQuery) -> Unit) {
+    val f = fmt()
     var low by remember { mutableStateOf(query.minCents?.let { (it / 100).toString() }.orEmpty()) }
     var high by remember { mutableStateOf(query.maxCents?.let { (it / 100).toString() }.orEmpty()) }
     DialogCard(onDismiss) {
@@ -453,7 +454,7 @@ private fun AmountDialog(query: BillQuery, onDismiss: () -> Unit, onChange: (Bil
             }
         }
         CancelConfirmRow(onDismiss) {
-            onChange(query.copy(minCents = Money.parse(low), maxCents = Money.parse(high)))
+            onChange(query.copy(minCents = f.parse(low), maxCents = f.parse(high)))
             onDismiss()
         }
     }

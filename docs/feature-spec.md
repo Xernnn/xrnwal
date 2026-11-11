@@ -206,6 +206,11 @@ recommendations; Show account on bill card; Income-Expense Colors (arrows, amoun
 Arrow Direction (Default, Reverse); Include future bills. Colors has separate rows for each arrow and
 amount, a 12-colour dialog, reset and a preview.
 
+Amounts typed in a field follow the Thousands Separator: with $1.000,01, "500.000" is five hundred
+thousand and "500,5" five hundred and a half; with $1,000.01 the other way round. In a currency without
+cents, such as the dong, one mark before three digits is always thousands. A CSV file names no
+separator, so there one mark before three digits is still a decimal.
+
 ### App Icons
 
 Eight colours of the logo in a grid, the current one outlined. Choosing one closes the app and

@@ -165,7 +165,7 @@ fun BudgetScreen() {
             numeric = true,
             onDismiss = { editOverall = false },
         ) { text ->
-            val cents = Money.parse(text) ?: 0
+            val cents = f.parse(text) ?: 0
             repo.save { put(overall?.copy(amountCents = cents) ?: Budget(amountCents = cents)) }
             editOverall = false
         }
@@ -185,7 +185,7 @@ fun BudgetScreen() {
     }
     newCategory?.let { category ->
         InputDialog("${category.name} budget", numeric = true, onDismiss = { newCategory = null }) { text ->
-            val cents = Money.parse(text) ?: 0
+            val cents = f.parse(text) ?: 0
             if (cents > 0) repo.save { put(Budget(categoryId = category.id, amountCents = cents)) }
             newCategory = null
         }
@@ -202,7 +202,7 @@ fun BudgetScreen() {
                     editBudget = null
                 }
                 PrimaryButton("Save", Modifier.weight(1f)) {
-                    val cents = Money.parse(text) ?: budget.amountCents
+                    val cents = f.parse(text) ?: budget.amountCents
                     repo.save { put(budget.copy(amountCents = cents)) }
                     editBudget = null
                 }
@@ -270,7 +270,7 @@ fun SavingsEditScreen(typeName: String) {
     var accountId by remember { mutableStateOf<Long?>(null) }
     var note by remember { mutableStateOf("") }
     var dialog by remember { mutableStateOf<String?>(null) }
-    val cents = Money.parse(amount.ifBlank { "0" }) ?: 0
+    val cents = f.parse(amount.ifBlank { "0" }, currency) ?: 0
     val rule = RepeatRule(
         kind,
         when (kind) {
@@ -466,7 +466,7 @@ fun SavingsDetailScreen(id: Long) {
     }
     if (add) {
         InputDialog("Deposit", numeric = true, onDismiss = { add = false }) { text ->
-            val cents = Money.parse(text) ?: 0
+            val cents = f.parse(text, plan.currency) ?: 0
             if (cents > 0) repo.save { put(SavingsDeposit(planId = plan.id, amountCents = cents, atMillis = System.currentTimeMillis())) }
             add = false
         }
@@ -587,6 +587,7 @@ fun RecurringDetailScreen(id: Long) {
 fun RecurringEditScreen(id: Long) {
     val s = snap()
     val settings = prefs()
+    val f = fmt()
     val nav = LocalNav.current
     val repo = LocalRepo.current
     val context = LocalContext.current
@@ -614,7 +615,7 @@ fun RecurringEditScreen(id: Long) {
     var pendingPast by remember { mutableStateOf<Recurring?>(null) }
 
     fun candidate(): Recurring? {
-        val cents = Money.parse(amount) ?: 0
+        val cents = f.parse(amount, currency) ?: 0
         val problem = when {
             cents <= 0 -> "Please enter amount"
             tab == 0 && categoryId == null -> "Please select a category"
