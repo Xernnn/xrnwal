@@ -1,11 +1,14 @@
 package com.xern.xrnwallet
 
 import android.content.SharedPreferences
+import com.xern.xrnwallet.data.AppLock
 import com.xern.xrnwallet.data.Settings
 import com.xern.xrnwallet.data.SettingsStore
+import com.xern.xrnwallet.data.sha256
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -69,5 +72,40 @@ class AppLockTest {
         assertEquals(listOf("From the file", "mine", "my salt"), listOf(again.nickname, again.pinHash, again.lockSalt))
         assertFalse(again.biometric)
         assertTrue(again.locked)
+    }
+}
+
+class LockSecretTest {
+    @Test
+    fun aPinIsKeptAsPbkdf2AndOneKeptTheOldWayOpensOnceThenIsKeptTheNewWay() {
+        val set = AppLock.withPin(Settings(), "12345678")
+        val stored = set.pinHash.orEmpty()
+        assertTrue(stored, stored.startsWith("pbkdf2-sha256:600000:"))
+        assertEquals(8, set.pinLength)
+        assertTrue(AppLock.attempt(set, pattern = false, secret = "12345678").opened)
+        assertFalse(AppLock.attempt(set, pattern = false, secret = "1234567").opened)
+        // Each is salted on its own, so two phones with one PIN keep different hashes.
+        assertNotEquals(stored, AppLock.withPin(Settings(), "12345678").pinHash)
+
+        // As an earlier build kept them: one SHA-256 of the salt and the secret.
+        val old = Settings(pinHash = sha256("salt" + "4321"), patternHash = sha256("salt" + "0-1-2-5"), lockSalt = "salt")
+        assertFalse(AppLock.attempt(old, pattern = false, secret = "1234").opened)
+        val opened = AppLock.attempt(old, pattern = false, secret = "4321")
+        assertTrue(opened.opened)
+        val again = opened.settings.pinHash.orEmpty()
+        assertTrue(again, again.startsWith("pbkdf2-sha256:600000:"))
+        assertTrue(AppLock.attempt(opened.settings, pattern = false, secret = "4321").opened)
+        assertFalse(AppLock.attempt(opened.settings, pattern = false, secret = "1234").opened)
+        // The pattern, still kept the old way, opens with the salt it was made with.
+        assertTrue(AppLock.attempt(opened.settings, pattern = true, secret = "0-1-2-5").opened)
+        assertFalse(AppLock.attempt(opened.settings, pattern = true, secret = "0-1-2-4").opened)
+    }
+
+    @Test
+    fun aPinHasFourToEightDigits() {
+        assertEquals(listOf(4, 8), listOf("1234", "12345678").map { AppLock.withPin(Settings(), it).pinLength })
+        listOf("123", "123456789", "12a4").forEach { pin ->
+            assertTrue(pin, runCatching { AppLock.withPin(Settings(), pin) }.isFailure)
+        }
     }
 }

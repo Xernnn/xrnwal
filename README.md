@@ -29,8 +29,8 @@ Kotlin and Jetpack Compose, with Room for storage. Minimum Android 8.0.
   was recorded at, so history doesn't move when rates change.
 - **Made to fit:** ledgers, categories and subcategories, tags, light and dark with colour accents,
   your own start of month, number formats, reminders, six home-screen widgets and eight icon colours.
-- **Lock:** PIN, pattern or biometric. While a lock is set, widgets show dots instead of amounts and
-  Recents keeps no picture of the app.
+- **Lock:** a PIN of 4 to 8 digits, a pattern or biometrics. While a lock is set, widgets show dots
+  instead of amounts and Recents keeps no picture of the app.
 - **Files:** CSV export and import, in its own format or a general template, and backup files that
   hold everything but the app lock, photos included.
 

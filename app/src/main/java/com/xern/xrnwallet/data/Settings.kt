@@ -50,10 +50,14 @@ data class Settings(
     val welcomeSeen: Boolean = false,
     val hapticStrength: Int = 1,
     val hideAmounts: Boolean = false,
+    /** See [LockSecret]. */
     val pinHash: String? = null,
     val patternHash: String? = null,
+    /** The salt of a PIN or pattern kept the way earlier builds did. */
     val lockSalt: String = "",
     val biometric: Boolean = false,
+    /** The PIN's digits, so the lock screen tries it as the last is typed. Earlier builds' PINs had 4. */
+    val pinLength: Int = AppLock.PIN_MIN,
     val ratesUpdatedAt: Long = 0,
 ) {
     val moneyFormat: MoneyFormat
@@ -91,6 +95,7 @@ data class Settings(
         patternHash = other.patternHash,
         lockSalt = other.lockSalt,
         biometric = other.biometric,
+        pinLength = other.pinLength,
     )
 
     companion object {
