@@ -16,7 +16,10 @@ object Money {
 
     fun fromCents(cents: Long): BigDecimal = BigDecimal.valueOf(cents, 2)
 
-    /** Parses "1234.5", "1234,5", "1.234,50" or "1,234.50" into cents, or null. */
+    /** One mark, two or more times, each before three digits: only thousands are written that way. */
+    private val thousands = Regex("[+-]?\\d{1,3}(?:[.,]\\d{3}){2,}")
+
+    /** Parses "1234.5", "1234,5", "1.234,50", "1,234.50", "1.234.567" or "1,234,567" into cents, or null. */
     fun parse(text: String): Long? {
         val cleaned = text.trim().replace(" ", "").replace(" ", "")
         if (cleaned.isEmpty()) return null
@@ -29,6 +32,8 @@ object Money {
                 val decimal = if (decimalIsComma) "," else "."
                 cleaned.replace(grouping, "").replace(decimal, ".")
             }
+            // As amounts are shown here, "1.500.000". Read as a decimal it was no number at all.
+            thousands.matches(cleaned) -> cleaned.replace(".", "").replace(",", "")
             lastComma >= 0 -> cleaned.replace(',', '.')
             else -> cleaned
         }

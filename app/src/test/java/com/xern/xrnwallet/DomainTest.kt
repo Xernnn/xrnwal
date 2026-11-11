@@ -107,6 +107,15 @@ class DomainTest {
     }
 
     @Test
+    fun thousandsMarkedTheWayAmountsAreShownAreRead() {
+        assertEquals(150000000L, Money.parse("1.500.000"))
+        assertEquals(150000000L, Money.parse("1,500,000"))
+        assertEquals(-150000000L, Money.parse("-1.500.000"))
+        assertNull(Money.parse("1.2.3"))
+        assertNull(Money.parse("1.500.00"))
+    }
+
+    @Test
     fun calculatorRespectsPrecedence() {
         assertEquals("15.00", Calculator.evaluate("12+3").toString())
         assertEquals("14.00", Calculator.evaluate("2+3×4").toString())
