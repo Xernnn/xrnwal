@@ -63,7 +63,7 @@ object Money {
      * Null for a number no amount could be. One past what a Long holds made [toCents] throw, and an
      * exponent like 1e999999999 kept it working out the digits until memory ran out.
      */
-    private fun centsOrNull(value: BigDecimal): Long? {
+    fun centsOrNull(value: BigDecimal): Long? {
         if (value.scale() !in -MAX_DIGITS..MAX_DIGITS || value.precision() - value.scale() > MAX_DIGITS) return null
         return try {
             toCents(value)

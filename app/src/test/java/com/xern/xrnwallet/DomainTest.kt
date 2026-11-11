@@ -163,6 +163,17 @@ class DomainTest {
     }
 
     @Test
+    fun aKeypadSumTooLargeForAnAmountIsNoAmountNotACrash() {
+        // Twelve digits are the most the keypad takes for each number.
+        assertEquals("999999999998000000000001.00", Calculator.evaluate("999999999999×999999999999").toString())
+        assertNull(Calculator.cents("999999999999×999999999999"))
+        assertNull(Calculator.cents("999999999999×99999999"))
+        assertEquals(9_999_999_999_900L, Calculator.cents("99999999999+0"))
+        assertEquals(1500L, Calculator.cents("12+3"))
+        assertNull(Calculator.cents("5÷0"))
+    }
+
+    @Test
     fun keypadBehaviour() {
         assertEquals("5", Calculator.press("0", '5'))
         assertEquals("12+", Calculator.press("12-", '+'))

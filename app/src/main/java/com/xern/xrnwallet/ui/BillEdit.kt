@@ -194,7 +194,11 @@ fun BillEditScreen(id: Long, date: Long, initialType: Int) {
 
     fun save() {
         if (saving) return
-        val cents = Calculator.evaluate(amount)?.let(Money::toCents)
+        val cents = Calculator.cents(amount)
+        if (cents == null && Calculator.evaluate(amount) != null) {
+            toast("That amount is too large")
+            return
+        }
         if (cents == null || cents <= 0) {
             toast("Please enter the amount")
             return
