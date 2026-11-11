@@ -22,10 +22,26 @@ object Money {
     /** One mark, two or more times, each before three digits: only thousands are written that way. */
     private val thousands = Regex("[+-]?\\d{1,3}(?:[.,]\\d{3}){2,}")
 
-    /** Parses "1234.5", "1234,5", "1.234,50", "1,234.50", "1.234.567" or "1,234,567" into cents, or null. */
-    fun parse(text: String): Long? {
+    /** One mark, once, before exactly three digits, as in "500.000" or "1,500": thousands or a decimal. */
+    private val either = Regex("[+-]?[1-9]\\d{0,2}[.,]\\d{3}")
+
+    /** Whether [code] has no cents, as ISO 4217 has it for the dong, yen and won. False for a code it doesn't know. */
+    fun wholeUnits(code: String): Boolean =
+        runCatching { java.util.Currency.getInstance(code).defaultFractionDigits == 0 }.getOrDefault(false)
+
+    /**
+     * Parses "1234.5", "1234,5", "1.234,50", "1,234.50", "1.234.567" or "1,234,567" into cents, or null.
+     * One mark once before exactly three digits, as in "500.000", reads either way. Typed in a field,
+     * [decimalMark] is that of the number format chosen, so the other mark is a thousands one, and with
+     * [wholeUnits], for a currency without cents such as the dong, either mark is. With neither, as for a
+     * CSV file, which doesn't say, it is a decimal.
+     */
+    fun parse(text: String, decimalMark: Char? = null, wholeUnits: Boolean = false): Long? {
         val cleaned = text.trim().replace(" ", "").replace(" ", "")
         if (cleaned.isEmpty()) return null
+        if (either.matches(cleaned) && (wholeUnits || (decimalMark != null && decimalMark !in cleaned))) {
+            return cleaned.replace(".", "").replace(",", "").toBigDecimalOrNull()?.let(::centsOrNull)
+        }
         val lastDot = cleaned.lastIndexOf('.')
         val lastComma = cleaned.lastIndexOf(',')
         val normalized = when {
@@ -47,7 +63,7 @@ object Money {
      * Null for a number no amount could be. One past what a Long holds made [toCents] throw, and an
      * exponent like 1e999999999 kept it working out the digits until memory ran out.
      */
-    private fun centsOrNull(value: BigDecimal): Long? {
+    fun centsOrNull(value: BigDecimal): Long? {
         if (value.scale() !in -MAX_DIGITS..MAX_DIGITS || value.precision() - value.scale() > MAX_DIGITS) return null
         return try {
             toCents(value)

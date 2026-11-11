@@ -120,6 +120,13 @@ interface AppDao {
     @Query("DELETE FROM Reminder") suspend fun clearReminders()
     @Query("DELETE FROM CurrencyRate") suspend fun clearRates()
 
+    /** An account, with the bills whose fixed amounts were re-expressed for a change of its currency. */
+    @Transaction
+    suspend fun putAccount(account: Account, bills: List<Bill>) {
+        putBills(bills)
+        put(account)
+    }
+
     @Transaction
     suspend fun clearEverything() {
         clearBillTags(); clearBills(); clearLedgers(); clearAccounts(); clearCategories(); clearTags()

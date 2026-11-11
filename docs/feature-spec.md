@@ -158,9 +158,13 @@ Name, time, repeat (Daily, Weekly, Monthly), notification content presets or cus
 
 ### Password Protection
 
-Digital (PIN), Gesture (pattern), Biometric unlock. Hint to set two methods. While any lock is set,
-widgets print dots instead of amounts and Recents keeps no picture of the app. Both reach past the
-lock screen, so the session being unlocked changes neither. Screenshots stay allowed on Android 13
+Digital (PIN of 4 to 8 digits), Gesture (pattern), Biometric unlock. Hint to set two methods. A PIN
+or pattern is kept as PBKDF2-HMAC-SHA256; one kept by an earlier build as a single SHA-256 is kept the
+new way the first time it opens the app. After five wrong PINs or patterns in a row the lock screen
+waits 30 seconds, doubling with each further miss; closing the app doesn't end the wait, and
+biometrics still open it. While any lock is set, widgets print dots instead of amounts and Recents
+keeps no picture of the app. Both reach past the lock screen, so the session being unlocked changes
+neither. Screenshots stay allowed on Android 13
 and later. Older versions have no way to leave out only the Recents picture, so screenshots are
 blocked there.
 
@@ -201,6 +205,11 @@ Show base currency symbol; Thousands Separator ($1,000.01, $1.000,01, Adaptive);
 recommendations; Show account on bill card; Income-Expense Colors (arrows, amounts, reset, preview);
 Arrow Direction (Default, Reverse); Include future bills. Colors has separate rows for each arrow and
 amount, a 12-colour dialog, reset and a preview.
+
+Amounts typed in a field follow the Thousands Separator: with $1.000,01, "500.000" is five hundred
+thousand and "500,5" five hundred and a half; with $1,000.01 the other way round. In a currency without
+cents, such as the dong, one mark before three digits is always thousands. A CSV file names no
+separator, so there one mark before three digits is still a decimal.
 
 ### App Icons
 
@@ -245,6 +254,9 @@ bills; + adds a bill on that date.
 
 - Each bill keeps the rate it was recorded with, so history does not move when rates change.
 - Account balances are held natively and converted at the current rate for display and net assets.
+- A bill or transfer into an account in another currency keeps the amount it put there, worked out
+  at the rates of the moment it was saved or recorded. Bills saved before that are still worked out at
+  today's rate.
 
 ## Out of scope for the first build
 
@@ -268,7 +280,8 @@ copy the server replaces is kept: the last 20, and the first of each day for 60 
 - The app lock never leaves the phone. Taking a copy from the server keeps this phone's own lock, so
   a new phone starts with no lock until one is set.
 - The login is kept encrypted with a key held in the phone's keystore. Addresses must be `https://`.
-- Backup files are separate from sync. They hold everything, including the app lock.
+- Backup files are separate from sync. They hold everything but the app lock, so restoring one keeps
+  this phone's own lock too.
 
 When nothing changed on the phone, a newer server copy simply comes down. Nothing is overwritten
 otherwise:

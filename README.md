@@ -29,10 +29,11 @@ Kotlin and Jetpack Compose, with Room for storage. Minimum Android 8.0.
   was recorded at, so history doesn't move when rates change.
 - **Made to fit:** ledgers, categories and subcategories, tags, light and dark with colour accents,
   your own start of month, number formats, reminders, six home-screen widgets and eight icon colours.
-- **Lock:** PIN, pattern or biometric. While a lock is set, widgets show dots instead of amounts and
-  Recents keeps no picture of the app.
+- **Lock:** a PIN of 4 to 8 digits, a pattern or biometrics. After five wrong tries it waits 30
+  seconds, twice as long after each further miss. While a lock is set, widgets show dots instead of
+  amounts and Recents keeps no picture of the app.
 - **Files:** CSV export and import, in its own format or a general template, and backup files that
-  hold everything, photos included.
+  hold everything but the app lock, photos included.
 
 Every gesture has a button that does the same, and nothing is ever deleted by a swipe.
 
@@ -47,9 +48,9 @@ already has a copy, when this phone was restored from a file or had all its data
 server went backwards, the app asks which copy to keep, and files the other on the server first. The server keeps every copy it replaces, the last 20 and the first of each
 day for 60 days, so Earlier copies can undo a choice.
 
-The app lock never leaves the phone: taking the server's copy keeps this phone's own lock. The login
-is stored encrypted with a key in the phone's keystore, and the release build only accepts `https://`
-addresses.
+The app lock never leaves the phone: taking the server's copy, or restoring a backup file, keeps this
+phone's own lock. The login is stored encrypted with a key in the phone's keystore, and the release
+build only accepts `https://` addresses.
 
 ## Build and test
 

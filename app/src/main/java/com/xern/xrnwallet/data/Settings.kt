@@ -1,6 +1,7 @@
 package com.xern.xrnwallet.data
 
 import android.content.Context
+import android.content.SharedPreferences
 import com.xern.xrnwallet.domain.Belonging
 import com.xern.xrnwallet.domain.DecimalMode
 import com.xern.xrnwallet.domain.MoneyFormat
@@ -49,10 +50,17 @@ data class Settings(
     val welcomeSeen: Boolean = false,
     val hapticStrength: Int = 1,
     val hideAmounts: Boolean = false,
+    /** See [LockSecret]. */
     val pinHash: String? = null,
     val patternHash: String? = null,
+    /** The salt of a PIN or pattern kept the way earlier builds did. */
     val lockSalt: String = "",
     val biometric: Boolean = false,
+    /** The PIN's digits, so the lock screen tries it as the last is typed. Earlier builds' PINs had 4. */
+    val pinLength: Int = AppLock.PIN_MIN,
+    /** Wrong PINs and patterns in a row, and when the last was. See [AppLock.waitLeft]. */
+    val unlockMisses: Int = 0,
+    val lastMissAt: Long = 0,
     val ratesUpdatedAt: Long = 0,
 ) {
     val moneyFormat: MoneyFormat
@@ -68,7 +76,21 @@ data class Settings(
 
     val locked: Boolean get() = pinHash != null || patternHash != null || biometric
 
-    /** The app lock belongs to this phone. It is never sent to the home server. */
+    /**
+     * What here this app can't work with, or null. Each is looked up as the app opens, so one out of
+     * range, from a backup file or server copy edited by hand, closed it on every launch.
+     */
+    fun problem(): String? = when {
+        separators !in SeparatorStyle.entries.indices -> "its Thousands Separator is $separators, which this app doesn't have"
+        decimals !in DecimalMode.entries.indices -> "its Decimal places is $decimals, which this app doesn't have"
+        weekendRule !in WeekendRule.entries.indices -> "its On weekends is $weekendRule, which this app doesn't have"
+        belonging !in Belonging.entries.indices -> "its Belonging month is $belonging, which this app doesn't have"
+        firstDayOfWeek !in 1..7 -> "its first day of the week is $firstDayOfWeek, not 1 to 7"
+        startDay !in 1..31 -> "its Start of Month is day $startDay"
+        else -> null
+    }
+
+    /** The app lock belongs to this phone. It is never sent to the home server or put in a backup file. */
     fun withoutLock(): Settings = withLockOf(Settings())
 
     fun withLockOf(other: Settings): Settings = copy(
@@ -76,6 +98,9 @@ data class Settings(
         patternHash = other.patternHash,
         lockSalt = other.lockSalt,
         biometric = other.biometric,
+        pinLength = other.pinLength,
+        unlockMisses = other.unlockMisses,
+        lastMissAt = other.lastMissAt,
     )
 
     companion object {
@@ -87,8 +112,9 @@ data class Settings(
     }
 }
 
-class SettingsStore(context: Context) {
-    private val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
+class SettingsStore(private val prefs: SharedPreferences) {
+    constructor(context: Context) : this(context.getSharedPreferences("settings", Context.MODE_PRIVATE))
+
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val state = MutableStateFlow(load())
 
@@ -104,17 +130,11 @@ class SettingsStore(context: Context) {
         prefs.edit().putString(KEY, json.encodeToString(next)).apply()
     }
 
-    fun export(): String = json.encodeToString(state.value)
+    /** What a backup file and the server's copy hold: everything but the app lock, which belongs to this phone. */
+    fun export(): String = json.encodeToString(state.value.withoutLock())
 
-    fun exportWithoutLock(): String = json.encodeToString(state.value.withoutLock())
-
+    /** Takes settings from a backup file or the server's copy, keeping this phone's own app lock. */
     fun restore(text: String) {
-        val restored = json.decodeFromString<Settings>(text)
-        state.value = restored
-        prefs.edit().putString(KEY, text).apply()
-    }
-
-    fun restoreKeepingLock(text: String) {
         val restored = json.decodeFromString<Settings>(text)
         update { restored.withLockOf(it) }
     }

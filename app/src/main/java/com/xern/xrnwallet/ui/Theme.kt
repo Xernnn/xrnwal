@@ -36,6 +36,7 @@ import com.xern.xrnwallet.data.Repository
 import com.xern.xrnwallet.data.Settings
 import com.xern.xrnwallet.data.Snapshot
 import com.xern.xrnwallet.domain.Currencies
+import com.xern.xrnwallet.domain.Money
 import com.xern.xrnwallet.domain.Period
 import com.xern.xrnwallet.domain.PeriodRules
 import java.time.LocalDate
@@ -76,6 +77,9 @@ class Fmt(private val settings: Settings) {
     fun money(cents: Long, code: String = base): String = format.money(cents, symbol(code))
     fun signed(cents: Long, code: String = base): String = format.signed(cents, symbol(code))
     fun plain(cents: Long): String = (if (cents < 0) "-" else "") + format.digits(cents)
+
+    /** An amount typed in [code], read the way this number format writes one. See [Money.parse]. */
+    fun parse(text: String, code: String = base): Long? = Money.parse(text, format.decimalChar, Money.wholeUnits(code))
     val expenseColor = Color(settings.expenseColor)
     val incomeColor = Color(settings.incomeColor)
     val expenseArrowColor = Color(settings.expenseArrowColor)

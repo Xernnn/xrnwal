@@ -95,6 +95,12 @@ object Calculator {
         return total.setScale(2, RoundingMode.HALF_UP)
     }
 
+    /**
+     * The result in cents, or null when there is none: a division by zero, or more than an amount can
+     * hold. Twelve digits times twelve digits is, and converting that threw, closing the app on Save.
+     */
+    fun cents(text: String): Long? = evaluate(text)?.let(Money::centsOrNull)
+
     /** Text form of a value, for loading an existing amount or replacing a sum with its result. */
     fun format(value: BigDecimal): String =
         value.stripTrailingZeros().let { if (it.scale() < 0) it.setScale(0) else it }.toPlainString()

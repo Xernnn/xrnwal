@@ -140,6 +140,7 @@ fun Snapshot.billStart(base: String): BillStart {
 fun BillEditScreen(id: Long, date: Long, initialType: Int) {
     val s = snap()
     val settings = prefs()
+    val f = fmt()
     val nav = LocalNav.current
     val repo = LocalRepo.current
     val context = LocalContext.current
@@ -193,7 +194,11 @@ fun BillEditScreen(id: Long, date: Long, initialType: Int) {
 
     fun save() {
         if (saving) return
-        val cents = Calculator.evaluate(amount)?.let(Money::toCents)
+        val cents = Calculator.cents(amount)
+        if (cents == null && Calculator.evaluate(amount) != null) {
+            toast("That amount is too large")
+            return
+        }
         if (cents == null || cents <= 0) {
             toast("Please enter the amount")
             return
@@ -225,7 +230,7 @@ fun BillEditScreen(id: Long, date: Long, initialType: Int) {
             atMillis = BillCsv.millisOf(at),
             inBudget = existing?.inBudget ?: true,
             recurringId = existing?.recurringId,
-        )
+        ).let { it.copy(toAmountCents = s.fixedAmount(it, before = existing)) }
         saving = true
         scope.launch {
             repo.saveBill(bill, tagIds)
@@ -441,7 +446,7 @@ fun BillEditScreen(id: Long, date: Long, initialType: Int) {
             numeric = true,
             onDismiss = { dialog = null },
         ) {
-            feeCents = Money.parse(it) ?: 0
+            feeCents = f.parse(it, currency) ?: 0
             dialog = null
         }
         "sub" -> {
@@ -822,7 +827,8 @@ fun BillDetailScreen(id: Long) {
                 dialog = null
             }
             "account" -> AccountDialog(s.accounts.filter { !it.archived }, allowNone = bill.type != BillType.TRANSFER, onDismiss = { dialog = null }) {
-                repo.updateBill(bill.copy(accountId = it))
+                val moved = bill.copy(accountId = it)
+                repo.updateBill(moved.copy(toAmountCents = s.fixedAmount(moved, before = bill)))
                 dialog = null
             }
         }

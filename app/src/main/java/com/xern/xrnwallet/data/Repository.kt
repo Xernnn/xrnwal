@@ -16,6 +16,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.doubleOrNull
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
@@ -47,6 +50,33 @@ data class Backup(
     /** Base64 image data by file name, so a backup restores completely on another phone. */
     val photos: Map<String, String> = emptyMap(),
 )
+
+/** A backup or server copy this app can read but couldn't use. The message says why, for the owner. */
+class UnusableBackup(message: String) : Exception(message)
+
+object BackupReader {
+    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+
+    /**
+     * Parses a backup file or server copy, or throws: [UnusableBackup] when it holds something this app
+     * would take and then fail on. Settings, recurring items and rates are read again each time the app
+     * opens, so a single value out of range closed it on every launch. Nothing is changed here, so a copy
+     * refused leaves the phone as it was.
+     */
+    fun read(text: String): Backup {
+        val backup = json.decodeFromString<Backup>(text)
+        // This app would drop what it can't read, then send that back to the server without it.
+        if (backup.version > BACKUP_VERSION) throw UnusableBackup("it was made by a newer version of the app")
+        val problem = json.decodeFromString<Settings>(backup.settings).problem()
+            ?: backup.recurring.firstNotNullOfOrNull { it.problem() }
+            ?: backup.plans.firstNotNullOfOrNull { it.problem() }
+            ?: backup.reminders.firstNotNullOfOrNull { it.problem() }
+            // A rate is divided by. Zero gives infinity, which the Currencies page can't show and sync can't send.
+            ?: backup.rates.firstOrNull { !(it.rate.isFinite() && it.rate > 0) }?.let { "${it.code} has a rate of ${it.rate}" }
+        if (problem != null) throw UnusableBackup(problem)
+        return backup
+    }
+}
 
 object PhotoFiles {
     /** As the server's own grace: a photo just picked for a bill not saved yet, or just come down, stays. */
@@ -83,6 +113,24 @@ data class Rebased(val bills: List<Bill>, val rates: List<CurrencyRate>, val bud
                 budgets = budgets.map { it.copy(amountCents = Money.convert(it.amountCents, 1.0 / pivot)) },
             )
         }
+    }
+}
+
+/** The public rates the refresh button fetches. */
+object MarketRates {
+    /**
+     * Reads open.er-api.com's answer, which says how much of each currency one unit of the base buys,
+     * as how much of the base one unit of each is. Only a positive number makes a rate both ways: a 0
+     * from the service once meant infinity, which the Currencies page can't show and sync can't send,
+     * so any other value leaves out that currency alone. Null when the answer has no usable rate.
+     */
+    fun parse(body: String): Map<String, Double>? {
+        val rates = (Json.parseToJsonElement(body) as? JsonObject)?.get("rates") as? JsonObject ?: return null
+        return rates.mapNotNull { (code, value) ->
+            val bought = (value as? JsonPrimitive)?.takeUnless { it.isString }?.doubleOrNull ?: return@mapNotNull null
+            val rate = 1.0 / bought
+            if (bought > 0 && rate.isFinite() && rate > 0) code to rate else null
+        }.toMap().ifEmpty { null }
     }
 }
 
@@ -229,9 +277,10 @@ class Repository(
             val knownTags = dao.tagsNow().map { it.id }.toSet()
             val ledgers = dao.ledgersNow().mapTo(HashSet()) { it.id }
             val rates = dao.ratesNow()
+            val accounts = dao.accountsNow()
             dao.recurringNow().forEach { rule ->
                 val due = rule.due(now, ledgers)
-                due.forEach { addRuleBill(rule, it, knownTags, rates) }
+                due.forEach { addRuleBill(rule, it, knownTags, rates, accounts) }
                 if (due.isNotEmpty()) dao.put(rule.copy(generated = rule.generated + due.size))
             }
         }
@@ -242,12 +291,19 @@ class Repository(
         db.withTransaction {
             val knownTags = dao.tagsNow().map { it.id }.toSet()
             val rates = dao.ratesNow()
-            dates.forEach { addRuleBill(rule, it.atTime(rule.minuteOfDay / 60, rule.minuteOfDay % 60), knownTags, rates) }
+            val accounts = dao.accountsNow()
+            dates.forEach { addRuleBill(rule, it.atTime(rule.minuteOfDay / 60, rule.minuteOfDay % 60), knownTags, rates, accounts) }
         }
     }
 
-    private suspend fun addRuleBill(rule: Recurring, at: LocalDateTime, knownTags: Set<Long>, rates: List<CurrencyRate>) {
-        val billId = dao.put(rule.billAt(at, store.settings.value.baseCurrency, rates))
+    private suspend fun addRuleBill(
+        rule: Recurring,
+        at: LocalDateTime,
+        knownTags: Set<Long>,
+        rates: List<CurrencyRate>,
+        accounts: List<Account>,
+    ) {
+        val billId = dao.put(rule.billAt(at, store.settings.value.baseCurrency, rates, accounts))
         dao.putBillTags(rule.tags.filter { it in knownTags }.map { BillTag(billId, it) })
     }
 
@@ -372,15 +428,15 @@ class Repository(
     }
 
     /**
-     * What the home server keeps: a backup with the app lock left out and photos named rather than
-     * included. Rows are in a fixed order, because the sync compares this text to see what changed.
+     * What the home server keeps: a backup, with photos named rather than included. Rows are in a
+     * fixed order, because the sync compares this text to see what changed.
      */
     suspend fun syncDocument(): String = withContext(Dispatchers.IO) { db.withTransaction { document() } }
 
     /** [syncDocument] inside a transaction already open. */
     private suspend fun document(): String = json.encodeToString(
         Backup(
-            settings = store.exportWithoutLock(),
+            settings = store.export(),
             ledgers = dao.ledgersNow().sortedBy { it.id },
             accounts = dao.accountsNow().sortedBy { it.id },
             categories = dao.categoriesNow().sortedBy { it.id },
@@ -410,24 +466,23 @@ class Repository(
         PhotoFiles.sweep(File(context.filesDir, "photos"), dao.billsNow(), System.currentTimeMillis())
     }
 
-    /** Replaces everything with a backup file, app lock included. */
+    /** Replaces everything with a backup file. This phone keeps its own app lock, as a file holds none. */
     suspend fun restore(text: String) {
-        replace(text, keepLock = false, expected = null)
+        replace(text, expected = null)
     }
 
     /** For [SyncedWallet.replaceWith]: a server copy, which leaves the app lock out, so this phone keeps its own. */
-    suspend fun replaceIfUnchanged(text: String, expected: String): String? = replace(text, keepLock = true, expected)
+    suspend fun replaceIfUnchanged(text: String, expected: String): String? = replace(text, expected)
 
     /**
      * Replaces everything with a backup and returns the hash of the new [syncDocument]. The file is
-     * fully parsed before anything is deleted. With [expected], only while the document here still
-     * hashes to it, else null with nothing replaced. The check, the change and the new hash are one
-     * transaction, so a bill saved meanwhile waits for it and lands after, still to be sent.
+     * fully parsed and checked by [BackupReader] before anything is deleted. With [expected], only
+     * while the document here still hashes to it, else null with nothing replaced. The check, the
+     * change and the new hash are one transaction, so a bill saved meanwhile waits for it and lands
+     * after, still to be sent.
      */
-    private suspend fun replace(text: String, keepLock: Boolean, expected: String?): String? = withContext(Dispatchers.IO) {
-        val backup = json.decodeFromString<Backup>(text)
-        // This app would drop what it can't read, then send that back to the server without it.
-        check(backup.version <= BACKUP_VERSION) { "Made by a newer version of the app" }
+    private suspend fun replace(text: String, expected: String?): String? = withContext(Dispatchers.IO) {
+        val backup = BackupReader.read(text)
         val decoder = Base64.getDecoder()
         val photos = backup.photos.mapValues { decoder.decode(it.value) }
         val folder = File(context.filesDir, "photos").apply { mkdirs() }
@@ -450,7 +505,7 @@ class Repository(
             dao.putChecklistItems(backup.checklistItems)
             dao.putReminders(backup.reminders)
             dao.putRates(backup.rates)
-            if (keepLock) store.restoreKeepingLock(backup.settings) else store.restore(backup.settings)
+            store.restore(backup.settings)
             sha256(document())
         } ?: return@withContext null
         Reminders.scheduleAll(context, backup.reminders)
@@ -487,9 +542,7 @@ class Repository(
             connection.connectTimeout = 8000
             connection.readTimeout = 8000
             val body = connection.inputStream.bufferedReader().use { it.readText() }
-            val root = Json.parseToJsonElement(body) as kotlinx.serialization.json.JsonObject
-            val rates = root["rates"] as kotlinx.serialization.json.JsonObject
-            rates.mapValues { (_, value) -> 1.0 / value.toString().toDouble() }
+            MarketRates.parse(body)
         }.getOrNull() ?: return@withContext false
         marketRates.value = parsed
         dao.ratesNow().forEach { current ->

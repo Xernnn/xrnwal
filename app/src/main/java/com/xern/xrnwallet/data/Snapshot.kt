@@ -4,6 +4,8 @@ import com.xern.xrnwallet.domain.DateRange
 import com.xern.xrnwallet.domain.Money
 import com.xern.xrnwallet.domain.Period
 import com.xern.xrnwallet.domain.PeriodRules
+import java.math.BigDecimal
+import java.math.RoundingMode
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.TextStyle
@@ -65,19 +67,57 @@ data class Snapshot(
         if (bill.currency == account.currency) cents
         else Money.convert(Money.convert(cents, bill.rate), 1.0 / rate(account.currency))
 
+    /** The account whose currency [Bill.toAmountCents] is in: a transfer's receiving one, else the bill's own. */
+    private fun fixedAccountId(bill: Bill): Long? = if (bill.type == BillType.TRANSFER) bill.toAccountId else bill.accountId
+
+    /** What [bill] puts into or takes from its account, in the account's currency: as fixed, or worked out today. */
+    private fun landed(bill: Bill, account: Account): Long =
+        if (bill.currency == account.currency) bill.amountCents
+        else bill.toAmountCents ?: inAccountCurrency(bill, account, bill.amountCents)
+
+    /**
+     * The amount [bill] puts into or takes from an account in another currency, fixed as it is saved, so
+     * that account's balance doesn't move when rates are refreshed: the receiving account of a transfer,
+     * or the account of an expense or income. Null within one currency. [before] is the bill as stored,
+     * when one is edited: on the same account in the same currency it keeps the rate it was recorded at,
+     * its amount scaled to a new one.
+     */
+    fun fixedAmount(bill: Bill, before: Bill? = null): Long? {
+        val account = accountById[fixedAccountId(bill)] ?: return null
+        if (account.currency == bill.currency) return null
+        val kept = before?.toAmountCents
+        if (kept != null && before.type == bill.type && before.currency == bill.currency &&
+            fixedAccountId(before) == account.id && before.amountCents > 0
+        ) {
+            return BigDecimal.valueOf(kept).multiply(BigDecimal.valueOf(bill.amountCents))
+                .divide(BigDecimal.valueOf(before.amountCents), 0, RoundingMode.HALF_UP).toLong()
+        }
+        return inAccountCurrency(bill, account, bill.amountCents)
+    }
+
+    /**
+     * The bills whose fixed amount is in [account]'s currency, re-expressed for its change to [currency]
+     * at today's rates, as the rest of its balance is. A bill in [currency] itself needs none.
+     */
+    fun fixedAmountsIn(account: Account, currency: String): List<Bill> {
+        if (currency == account.currency) return emptyList()
+        return bills.filter { it.toAmountCents != null && fixedAccountId(it) == account.id }.map { bill ->
+            val kept = bill.toAmountCents ?: 0
+            bill.copy(toAmountCents = if (bill.currency == currency) null else Money.convert(kept, rate(account.currency) / rate(currency)))
+        }
+    }
+
     /** Change a single bill makes to an account, in the account's own currency. */
     fun effectOn(bill: Bill, account: Account): Long {
         var total = 0L
         when (bill.type) {
-            BillType.EXPENSE -> if (bill.accountId == account.id) total -= inAccountCurrency(bill, account, bill.amountCents)
-            BillType.INCOME -> if (bill.accountId == account.id) total += inAccountCurrency(bill, account, bill.amountCents)
+            BillType.EXPENSE -> if (bill.accountId == account.id) total -= landed(bill, account)
+            BillType.INCOME -> if (bill.accountId == account.id) total += landed(bill, account)
             BillType.TRANSFER -> {
                 if (bill.accountId == account.id) {
                     total -= inAccountCurrency(bill, account, bill.amountCents + bill.feeCents)
                 }
-                if (bill.toAccountId == account.id) {
-                    total += bill.toAmountCents ?: inAccountCurrency(bill, account, bill.amountCents)
-                }
+                if (bill.toAccountId == account.id) total += landed(bill, account)
             }
         }
         return total

@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.core.content.PermissionChecker
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.xern.xrnwallet.data.BackupReader
 import com.xern.xrnwallet.data.Bill
 import com.xern.xrnwallet.data.BillCsv
 import com.xern.xrnwallet.data.BillType
@@ -55,6 +56,7 @@ import com.xern.xrnwallet.data.ImportResult
 import com.xern.xrnwallet.data.Reminder
 import com.xern.xrnwallet.data.Settings
 import com.xern.xrnwallet.data.Snapshot
+import com.xern.xrnwallet.data.UnusableBackup
 import com.xern.xrnwallet.data.totals
 import com.xern.xrnwallet.domain.Belonging
 import com.xern.xrnwallet.domain.Currencies
@@ -433,6 +435,7 @@ private fun FilterPanel(options: List<Pair<Long, String>>, chosen: Set<Long>, on
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun AmountDialog(query: BillQuery, onDismiss: () -> Unit, onChange: (BillQuery) -> Unit) {
+    val f = fmt()
     var low by remember { mutableStateOf(query.minCents?.let { (it / 100).toString() }.orEmpty()) }
     var high by remember { mutableStateOf(query.maxCents?.let { (it / 100).toString() }.orEmpty()) }
     DialogCard(onDismiss) {
@@ -451,7 +454,7 @@ private fun AmountDialog(query: BillQuery, onDismiss: () -> Unit, onChange: (Bil
             }
         }
         CancelConfirmRow(onDismiss) {
-            onChange(query.copy(minCents = Money.parse(low), maxCents = Money.parse(high)))
+            onChange(query.copy(minCents = f.parse(low), maxCents = f.parse(high)))
             onDismiss()
         }
     }
@@ -735,7 +738,7 @@ fun BackupScreen() {
                 Divider()
                 ListRow("Restore from a file", subtitle = "Replaces everything on this phone") { opener.launch(arrayOf("*/*")) }
             }
-            Muted("A backup file stays wherever you put it, and holds everything including the app lock.")
+            Muted("A backup file stays wherever you put it, and holds everything but the app lock, which stays with this phone.")
         }
     }
     pendingRestore?.let { uri ->
@@ -750,12 +753,19 @@ fun BackupScreen() {
             scope.launch {
                 val outcome = runCatching {
                     val text = withContext(Dispatchers.IO) { readUri(context, uri) } ?: error("unreadable")
+                    // First, so a file refused leaves the sync as it was too, with no copy to choose.
+                    withContext(Dispatchers.Default) { BackupReader.read(text) }
                     // Not sent up as an edit: the server's copy can hold other phones' newer changes.
                     sync.replaceHere { repo.restore(text) }
                 }
+                val failure = outcome.exceptionOrNull()
                 Toast.makeText(
                     context,
-                    if (outcome.isSuccess) "Backup restored" else "That file is not a valid backup. Nothing changed.",
+                    when (failure) {
+                        null -> "Backup restored"
+                        is UnusableBackup -> "This backup can't be used: ${failure.message}. Nothing changed."
+                        else -> "That file is not a valid backup. Nothing changed."
+                    },
                     Toast.LENGTH_LONG,
                 ).show()
             }

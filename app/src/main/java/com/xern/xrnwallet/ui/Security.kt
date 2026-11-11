@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Backspace
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -31,15 +32,11 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import com.xern.xrnwallet.MainActivity
-import com.xern.xrnwallet.data.Settings
-import java.security.MessageDigest
-import java.util.UUID
-
-private const val PIN_LENGTH = 4
-
-private fun hash(salt: String, secret: String): String =
-    MessageDigest.getInstance("SHA-256").digest((salt + secret).toByteArray())
-        .joinToString("") { "%02x".format(it) }
+import com.xern.xrnwallet.data.AppLock
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private fun canUseBiometric(context: android.content.Context): Boolean =
     BiometricManager.from(context).canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK) ==
@@ -62,13 +59,17 @@ private fun promptBiometric(activity: FragmentActivity, onSuccess: () -> Unit) {
     )
 }
 
+/**
+ * With a [length], the PIN is tried as its last digit is typed. Without one, a PIN is being chosen: 4 to
+ * 8 digits, then the tick.
+ */
 @Composable
-private fun PinPad(title: String, error: Boolean, onPin: (String) -> Unit) {
+private fun PinPad(title: String, error: Boolean, length: Int?, onPin: (String) -> Unit) {
     var pin by remember { mutableStateOf("") }
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(title, style = MaterialTheme.typography.titleMedium)
         Row(Modifier.padding(vertical = 22.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            repeat(PIN_LENGTH) { index ->
+            repeat(length ?: maxOf(AppLock.PIN_MIN, pin.length)) { index ->
                 Box(
                     Modifier
                         .size(16.dp)
@@ -83,22 +84,29 @@ private fun PinPad(title: String, error: Boolean, onPin: (String) -> Unit) {
                 )
             }
         }
-        listOf("123", "456", "789", " 0<").forEach { row ->
+        val done = if (length == null) 'k' else ' '
+        listOf("123", "456", "789", "${done}0<").forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.padding(bottom = 12.dp)) {
                 row.forEach { key ->
+                    val usable = key != ' ' && (key != 'k' || pin.length >= AppLock.PIN_MIN)
                     Box(
                         Modifier
                             .size(70.dp)
                             .clip(CircleShape)
                             .background(if (key == ' ') Color.Transparent else MaterialTheme.colorScheme.surfaceVariant)
-                            .clickable(enabled = key != ' ') {
-                                if (key == '<') {
-                                    pin = pin.dropLast(1)
-                                } else {
-                                    pin += key
-                                    if (pin.length == PIN_LENGTH) {
+                            .clickable(enabled = usable) {
+                                when {
+                                    key == '<' -> pin = pin.dropLast(1)
+                                    key == 'k' -> {
                                         onPin(pin)
                                         pin = ""
+                                    }
+                                    pin.length < (length ?: AppLock.PIN_MAX) -> {
+                                        pin += key
+                                        if (pin.length == length) {
+                                            onPin(pin)
+                                            pin = ""
+                                        }
                                     }
                                 }
                             },
@@ -106,6 +114,11 @@ private fun PinPad(title: String, error: Boolean, onPin: (String) -> Unit) {
                     ) {
                         when (key) {
                             '<' -> Icon(Icons.AutoMirrored.Filled.Backspace, "Backspace")
+                            'k' -> Icon(
+                                Icons.Filled.Check,
+                                "Done",
+                                tint = if (usable) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                             ' ' -> Unit
                             else -> Text(key.toString(), fontSize = 26.sp)
                         }
@@ -171,11 +184,44 @@ private fun PatternPad(title: String, error: Boolean, onPattern: (String) -> Uni
 @Composable
 fun LockScreen(activity: MainActivity, onUnlock: () -> Unit) {
     val settings = prefs()
+    val repo = LocalRepo.current
+    val scope = rememberCoroutineScope()
     var usePattern by remember { mutableStateOf(settings.pinHash == null) }
     var error by remember { mutableStateOf(false) }
+    var checking by remember { mutableStateOf(false) }
+
+    // Only this screen changes the lock while it shows, so its fields can be taken from the try whole.
+    fun attempt(secret: String, pattern: Boolean) {
+        if (checking) return
+        checking = true
+        scope.launch {
+            val tried = withContext(Dispatchers.Default) {
+                AppLock.attempt(repo.store.settings.value, pattern, secret, System.currentTimeMillis())
+            }
+            repo.store.update { it.withLockOf(tried.settings) }
+            checking = false
+            if (tried.opened) onUnlock() else error = true
+        }
+    }
+
+    fun biometricOpened() {
+        repo.store.update(AppLock::opened)
+        onUnlock()
+    }
+
+    var wait by remember { mutableLongStateOf(AppLock.waitLeft(settings, System.currentTimeMillis())) }
+    LaunchedEffect(settings.unlockMisses, settings.lastMissAt) {
+        while (true) {
+            val now = System.currentTimeMillis()
+            if (settings.lastMissAt > now) repo.store.update { AppLock.anchored(it, now) }
+            wait = AppLock.waitLeft(settings, now)
+            if (wait == 0L) break
+            delay(minOf(wait, 1000L))
+        }
+    }
 
     LaunchedEffect(Unit) {
-        if (settings.biometric && canUseBiometric(activity)) promptBiometric(activity, onUnlock)
+        if (settings.biometric && canUseBiometric(activity)) promptBiometric(activity, ::biometricOpened)
     }
     BackHandler { activity.moveTaskToBack(true) }
     Column(
@@ -190,14 +236,14 @@ fun LockScreen(activity: MainActivity, onUnlock: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        if (usePattern && settings.patternHash != null) {
-            PatternPad("Draw your pattern", error) {
-                if (hash(settings.lockSalt, it) == settings.patternHash) onUnlock() else error = true
-            }
+        if (wait > 0) {
+            Text("Too many wrong tries", style = MaterialTheme.typography.titleMedium)
+            Muted("Try again in ${countdown(wait)}", Modifier.padding(top = 12.dp))
+        } else if (usePattern && settings.patternHash != null) {
+            PatternPad("Draw your pattern", error) { attempt(it, pattern = true) }
         } else if (settings.pinHash != null) {
-            PinPad("Enter your PIN", error) {
-                if (hash(settings.lockSalt, it) == settings.pinHash) onUnlock() else error = true
-            }
+            val length = settings.pinLength.coerceIn(AppLock.PIN_MIN, AppLock.PIN_MAX)
+            PinPad("Enter your PIN", error, length) { attempt(it, pattern = false) }
         }
         Row(Modifier.padding(top = 24.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             if (settings.pinHash != null && settings.patternHash != null) {
@@ -207,19 +253,28 @@ fun LockScreen(activity: MainActivity, onUnlock: () -> Unit) {
                 }
             }
             if (settings.biometric && canUseBiometric(activity)) {
-                Pill("Use biometrics", false) { promptBiometric(activity, onUnlock) }
+                Pill("Use biometrics", false) { promptBiometric(activity, ::biometricOpened) }
             }
         }
     }
 }
 
-private fun Settings.withSalt(): Settings = if (lockSalt.isEmpty()) copy(lockSalt = UUID.randomUUID().toString()) else this
+/** "0:30", "4:00" or "1:04:00", rounded up so it never shows 0:00 while still waiting. */
+private fun countdown(millis: Long): String {
+    val seconds = (millis + 999) / 1000
+    return if (seconds >= 3600) {
+        "%d:%02d:%02d".format(seconds / 3600, seconds % 3600 / 60, seconds % 60)
+    } else {
+        "%d:%02d".format(seconds / 60, seconds % 60)
+    }
+}
 
 @Composable
 fun PasswordScreen() {
     val settings = prefs()
     val repo = LocalRepo.current
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var setup by remember { mutableStateOf<String?>(null) }
     var first by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf(false) }
@@ -236,14 +291,16 @@ fun PasswordScreen() {
             error = true
             return
         }
-        repo.store.update { current ->
-            val salted = current.withSalt()
-            val hashed = hash(salted.lockSalt, secret)
-            if (kind == "pin") salted.copy(pinHash = hashed) else salted.copy(patternHash = hashed)
+        scope.launch {
+            val chosen = withContext(Dispatchers.Default) {
+                val current = repo.store.settings.value
+                if (kind == "pin") AppLock.withPin(current, secret) else AppLock.withPattern(current, secret)
+            }
+            repo.store.update { it.withLockOf(chosen) }
+            setup = null
+            first = null
+            error = false
         }
-        setup = null
-        first = null
-        error = false
     }
 
     val kind = setup
@@ -253,10 +310,10 @@ fun PasswordScreen() {
                 val title = when {
                     error -> "They did not match. Try again"
                     first != null -> "Enter it again to confirm"
-                    kind == "pin" -> "Choose a 4 digit PIN"
+                    kind == "pin" -> "Choose a PIN of 4 to 8 digits"
                     else -> "Draw a pattern"
                 }
-                if (kind == "pin") PinPad(title, error) { finish(it, kind) } else PatternPad(title, error) { finish(it, kind) }
+                if (kind == "pin") PinPad(title, error, length = null) { finish(it, kind) } else PatternPad(title, error) { finish(it, kind) }
             }
         }
         return
@@ -285,6 +342,7 @@ fun PasswordScreen() {
                 }
             }
             Muted("Set two methods, so you have a fallback. A forgotten password cannot be recovered, and the app would need clearing.")
+            Muted("After five wrong tries the lock waits 30 seconds before the next, and twice as long after each further miss.")
             Muted("While a lock is set, widgets hide amounts and the recent apps screen shows no preview of this app.")
         }
     }

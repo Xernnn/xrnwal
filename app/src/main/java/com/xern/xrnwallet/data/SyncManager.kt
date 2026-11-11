@@ -97,8 +97,11 @@ class SyncManager(context: Context, private val repo: Repository, private val sc
             }
         }.await()
 
-    private fun describe(failure: Exception) =
-        (failure as? ServerFailure)?.message ?: "The server's copy could not be used. Nothing on this phone changed."
+    private fun describe(failure: Exception): String = when (failure) {
+        is ServerFailure -> failure.message.orEmpty()
+        is UnusableBackup -> "The server's copy can't be used here: ${failure.message}. Nothing on this phone changed."
+        else -> "The server's copy could not be used. Nothing on this phone changed."
+    }
 
     /** Returns true when the sync should be tried again later, as with a phone that's offline. */
     suspend fun syncNow(): Boolean {

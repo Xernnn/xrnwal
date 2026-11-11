@@ -8,6 +8,7 @@ import com.xern.xrnwallet.data.Budget
 import com.xern.xrnwallet.data.Category
 import com.xern.xrnwallet.data.CurrencyRate
 import com.xern.xrnwallet.data.Ledger
+import com.xern.xrnwallet.data.MarketRates
 import com.xern.xrnwallet.data.PhotoFiles
 import com.xern.xrnwallet.data.Rebased
 import com.xern.xrnwallet.data.Recurring
@@ -116,6 +117,33 @@ class DomainTest {
     }
 
     @Test
+    fun aTypedAmountFollowsTheChosenDecimalMarkAndTheDongHasNoCents() {
+        // The default format, $1.000,01: a point marks thousands.
+        assertEquals(50_000_000L, Money.parse("500.000", decimalMark = ','))
+        assertEquals(150_000L, Money.parse("1.500", decimalMark = ','))
+        assertEquals(-150_000L, Money.parse("-1.500", decimalMark = ','))
+        assertEquals(50_000L, Money.parse("500,000", decimalMark = ','))
+        // $1,000.01, the other way round.
+        assertEquals(150_000L, Money.parse("1,500", decimalMark = '.'))
+        assertEquals(150L, Money.parse("1.500", decimalMark = '.'))
+        // The dong has no cents, so three digits after either mark are thousands.
+        assertEquals(50_000_000L, Money.parse("500,000", decimalMark = ',', wholeUnits = true))
+        assertEquals(50_000_000L, Money.parse("500.000", decimalMark = '.', wholeUnits = true))
+        assertEquals(Money.parse("500.000", decimalMark = ',', wholeUnits = Money.wholeUnits("VND")), Money.parse("500,000", decimalMark = ',', wholeUnits = Money.wholeUnits("VND")))
+        assertEquals(listOf(true, true, false, false), listOf("VND", "JPY", "AUD", "QQQ").map(Money::wholeUnits))
+        // What never could be thousands reads as it did, such as a field filled in with an amount.
+        assertEquals(1250L, Money.parse("12.5", decimalMark = ','))
+        assertEquals(123450L, Money.parse("1234.50", decimalMark = ','))
+        assertEquals(123457L, Money.parse("1234.567", decimalMark = ','))
+        assertEquals(123450L, Money.parse("1.234,50", decimalMark = ','))
+        assertEquals(50L, Money.parse("0.500", decimalMark = ','))
+        assertEquals(150000000L, Money.parse("1.500.000", decimalMark = '.'))
+        // A file says nothing of its marks, so it reads as before.
+        assertEquals(50_000L, Money.parse("500.000"))
+        assertEquals(150L, Money.parse("1,500"))
+    }
+
+    @Test
     fun aNumberTooLargeForAnAmountIsRefusedNotThrown() {
         assertNull(Money.parse("99999999999999999999"))
         assertNull(Money.parse("1e30"))
@@ -132,6 +160,17 @@ class DomainTest {
         assertEquals("7.00", Calculator.evaluate("10-3").toString())
         assertEquals("12.00", Calculator.evaluate("12+").toString())
         assertNull(Calculator.evaluate("5÷0"))
+    }
+
+    @Test
+    fun aKeypadSumTooLargeForAnAmountIsNoAmountNotACrash() {
+        // Twelve digits are the most the keypad takes for each number.
+        assertEquals("999999999998000000000001.00", Calculator.evaluate("999999999999×999999999999").toString())
+        assertNull(Calculator.cents("999999999999×999999999999"))
+        assertNull(Calculator.cents("999999999999×99999999"))
+        assertEquals(9_999_999_999_900L, Calculator.cents("99999999999+0"))
+        assertEquals(1500L, Calculator.cents("12+3"))
+        assertNull(Calculator.cents("5÷0"))
     }
 
     @Test
@@ -566,12 +605,75 @@ class DomainTest {
             inBudget = false,
         )
         val at = LocalDate.of(2026, 11, 1).atTime(8, 0)
-        val bill = rent.billAt(at, "AUD", listOf(CurrencyRate("USD", 1.5), CurrencyRate("VND", 0.00006)))
+        val bill = rent.billAt(at, "AUD", listOf(CurrencyRate("USD", 1.5), CurrencyRate("VND", 0.00006)), emptyList())
         assertEquals(0.00006, bill.rate, 0.0)
         // 5,000,000 dong is 300 dollars. At one to one, as an unloaded snapshot has it, it was 5,000,000 dollars.
         assertEquals(30_000L, bill.baseCents)
         assertEquals(listOf(4L, at, "Rent", false), listOf(bill.recurringId, bill.dateTime, bill.note, bill.inBudget))
-        assertEquals(1.0, rent.billAt(at, "VND", listOf(CurrencyRate("AUD", 16_500.0))).rate, 0.0)
+        assertEquals(1.0, rent.billAt(at, "VND", listOf(CurrencyRate("AUD", 16_500.0)), emptyList()).rate, 0.0)
+    }
+
+    @Test
+    fun aBillIntoAnAccountInAnotherCurrencyKeepsWhatItPutThereWhenRatesChange() {
+        val cash = Account(id = 1, name = "Cash", currency = "AUD")
+        val dong = Account(id = 2, name = "Vietcombank", currency = "VND")
+        val card = Account(id = 3, name = "US card", currency = "USD")
+        val then = Snapshot(
+            accounts = listOf(cash, dong, card),
+            rates = listOf(CurrencyRate("VND", 0.00006), CurrencyRate("USD", 1.5)),
+        )
+        // A$100 sent home, landing as 1,666,666.67 dong at the rate of the day.
+        val sent = Bill(
+            id = 1, ledgerId = 1, type = BillType.TRANSFER, accountId = 1, toAccountId = 2,
+            amountCents = 10_000, currency = "AUD", atMillis = 0,
+        )
+        // A$30 of shopping paid from the dong account.
+        val spent = Bill(id = 2, ledgerId = 1, type = BillType.EXPENSE, accountId = 2, amountCents = 3_000, currency = "AUD", atMillis = 0)
+        val saved = listOf(sent, spent).map { it.copy(toAmountCents = then.fixedAmount(it)) }
+        assertEquals(listOf(166_666_667L, 50_000_000L), saved.map { it.toAmountCents })
+        assertEquals(116_666_667L, then.copy(bills = saved).balance(dong))
+        // The dong weakens and the rates are refreshed. What landed in the account stays as it was.
+        val now = then.copy(bills = saved, rates = listOf(CurrencyRate("VND", 0.00005), CurrencyRate("USD", 1.5)))
+        assertEquals(116_666_667L, now.balance(dong))
+        assertEquals(-10_000L, now.balance(cash))
+        // Nothing to fix within one currency.
+        assertNull(now.fixedAmount(spent.copy(accountId = 1)))
+
+        // Edited, it keeps the rate it was recorded at: unchanged, or scaled with its amount.
+        assertEquals(166_666_667L, now.fixedAmount(saved[0].copy(note = "Mum"), before = saved[0]))
+        assertEquals(333_333_334L, now.fixedAmount(saved[0].copy(amountCents = 20_000), before = saved[0]))
+        // Into another account, it is worked out again for that one, at today's rate.
+        assertEquals(2_000L, now.fixedAmount(saved[1].copy(accountId = 3), before = saved[1]))
+        assertNull(now.fixedAmount(saved[1].copy(accountId = 1), before = saved[1]))
+
+        // The account changes currency: what it holds is re-expressed, as its balance is, at today's rates.
+        val inDollars = now.fixedAmountsIn(dong, "USD")
+        assertEquals(listOf(1L to 5_556L, 2L to 1_667L), inDollars.map { it.id to it.toAmountCents })
+        assertEquals(listOf(null, null), now.fixedAmountsIn(dong, "AUD").map { it.toAmountCents })
+        assertEquals(emptyList<Bill>(), now.fixedAmountsIn(cash, "USD"))
+
+        // A recurring transfer home is fixed as it is recorded.
+        val monthly = Recurring(
+            ledgerId = 1, type = BillType.TRANSFER, accountId = 1, toAccountId = 2, amountCents = 10_000, currency = "AUD",
+            startEpochDay = LocalDate.of(2026, 11, 1).toEpochDay(),
+        )
+        val recorded = monthly.billAt(LocalDate.of(2026, 11, 1).atTime(8, 0), "AUD", now.rates, now.accounts)
+        assertEquals(200_000_000L, recorded.toAmountCents)
+    }
+
+    @Test
+    fun aRefreshedRateThatIsNotAPositiveNumberIsLeftOut() {
+        // As open.er-api.com answers: how much of each currency one Australian dollar buys.
+        val body = """{"result":"success","base_code":"AUD","rates":{"AUD":1,"USD":0.65,"VND":16500,""" +
+            """"ZERO":0,"BELOW":-2,"TINY":1e-320,"HUGE":1e400}}"""
+        val rates = MarketRates.parse(body) ?: emptyMap()
+        assertEquals(setOf("AUD", "USD", "VND"), rates.keys)
+        assertEquals(1.0 / 16500, rates["VND"] ?: 0.0, 1e-15)
+        assertEquals(1.0, rates["AUD"] ?: 0.0, 0.0)
+        // One rate written as text loses only itself, not the whole refresh.
+        assertEquals(setOf("USD"), MarketRates.parse("""{"rates":{"USD":0.65,"VND":"16500"}}""")?.keys)
+        assertNull(MarketRates.parse("""{"result":"error","error-type":"unsupported-code"}"""))
+        assertNull(MarketRates.parse("""{"rates":{"ZERO":0}}"""))
     }
 
     @Test
