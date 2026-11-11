@@ -16,6 +16,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.doubleOrNull
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
@@ -110,6 +113,24 @@ data class Rebased(val bills: List<Bill>, val rates: List<CurrencyRate>, val bud
                 budgets = budgets.map { it.copy(amountCents = Money.convert(it.amountCents, 1.0 / pivot)) },
             )
         }
+    }
+}
+
+/** The public rates the refresh button fetches. */
+object MarketRates {
+    /**
+     * Reads open.er-api.com's answer, which says how much of each currency one unit of the base buys,
+     * as how much of the base one unit of each is. Only a positive number makes a rate both ways: a 0
+     * from the service once meant infinity, which the Currencies page can't show and sync can't send,
+     * so any other value leaves out that currency alone. Null when the answer has no usable rate.
+     */
+    fun parse(body: String): Map<String, Double>? {
+        val rates = (Json.parseToJsonElement(body) as? JsonObject)?.get("rates") as? JsonObject ?: return null
+        return rates.mapNotNull { (code, value) ->
+            val bought = (value as? JsonPrimitive)?.takeUnless { it.isString }?.doubleOrNull ?: return@mapNotNull null
+            val rate = 1.0 / bought
+            if (bought > 0 && rate.isFinite() && rate > 0) code to rate else null
+        }.toMap().ifEmpty { null }
     }
 }
 
@@ -521,9 +542,7 @@ class Repository(
             connection.connectTimeout = 8000
             connection.readTimeout = 8000
             val body = connection.inputStream.bufferedReader().use { it.readText() }
-            val root = Json.parseToJsonElement(body) as kotlinx.serialization.json.JsonObject
-            val rates = root["rates"] as kotlinx.serialization.json.JsonObject
-            rates.mapValues { (_, value) -> 1.0 / value.toString().toDouble() }
+            MarketRates.parse(body)
         }.getOrNull() ?: return@withContext false
         marketRates.value = parsed
         dao.ratesNow().forEach { current ->

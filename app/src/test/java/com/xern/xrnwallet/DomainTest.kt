@@ -8,6 +8,7 @@ import com.xern.xrnwallet.data.Budget
 import com.xern.xrnwallet.data.Category
 import com.xern.xrnwallet.data.CurrencyRate
 import com.xern.xrnwallet.data.Ledger
+import com.xern.xrnwallet.data.MarketRates
 import com.xern.xrnwallet.data.PhotoFiles
 import com.xern.xrnwallet.data.Rebased
 import com.xern.xrnwallet.data.Recurring
@@ -620,6 +621,21 @@ class DomainTest {
         )
         val recorded = monthly.billAt(LocalDate.of(2026, 11, 1).atTime(8, 0), "AUD", now.rates, now.accounts)
         assertEquals(200_000_000L, recorded.toAmountCents)
+    }
+
+    @Test
+    fun aRefreshedRateThatIsNotAPositiveNumberIsLeftOut() {
+        // As open.er-api.com answers: how much of each currency one Australian dollar buys.
+        val body = """{"result":"success","base_code":"AUD","rates":{"AUD":1,"USD":0.65,"VND":16500,""" +
+            """"ZERO":0,"BELOW":-2,"TINY":1e-320,"HUGE":1e400}}"""
+        val rates = MarketRates.parse(body) ?: emptyMap()
+        assertEquals(setOf("AUD", "USD", "VND"), rates.keys)
+        assertEquals(1.0 / 16500, rates["VND"] ?: 0.0, 1e-15)
+        assertEquals(1.0, rates["AUD"] ?: 0.0, 0.0)
+        // One rate written as text loses only itself, not the whole refresh.
+        assertEquals(setOf("USD"), MarketRates.parse("""{"rates":{"USD":0.65,"VND":"16500"}}""")?.keys)
+        assertNull(MarketRates.parse("""{"result":"error","error-type":"unsupported-code"}"""))
+        assertNull(MarketRates.parse("""{"rates":{"ZERO":0}}"""))
     }
 
     @Test
