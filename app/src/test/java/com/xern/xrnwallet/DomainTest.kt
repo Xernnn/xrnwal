@@ -116,6 +116,15 @@ class DomainTest {
     }
 
     @Test
+    fun aNumberTooLargeForAnAmountIsRefusedNotThrown() {
+        assertNull(Money.parse("99999999999999999999"))
+        assertNull(Money.parse("1e30"))
+        assertNull(Money.parse("1e999999999"))
+        assertNull(Money.parse("1e-999999999"))
+        assertEquals(1500000000L, Money.parse("1.5E+7"))
+    }
+
+    @Test
     fun calculatorRespectsPrecedence() {
         assertEquals("15.00", Calculator.evaluate("12+3").toString())
         assertEquals("14.00", Calculator.evaluate("2+3×4").toString())

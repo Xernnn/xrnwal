@@ -11,6 +11,9 @@ import kotlin.math.roundToLong
 object Money {
     const val SCALE = 100L
 
+    /** The most digits an amount is read with, before or after the point. A Long of cents runs out sooner. */
+    private const val MAX_DIGITS = 18
+
     fun toCents(value: BigDecimal): Long =
         value.setScale(2, RoundingMode.HALF_UP).movePointRight(2).longValueExact()
 
@@ -37,7 +40,20 @@ object Money {
             lastComma >= 0 -> cleaned.replace(',', '.')
             else -> cleaned
         }
-        return normalized.toBigDecimalOrNull()?.let(::toCents)
+        return normalized.toBigDecimalOrNull()?.let(::centsOrNull)
+    }
+
+    /**
+     * Null for a number no amount could be. One past what a Long holds made [toCents] throw, and an
+     * exponent like 1e999999999 kept it working out the digits until memory ran out.
+     */
+    private fun centsOrNull(value: BigDecimal): Long? {
+        if (value.scale() !in -MAX_DIGITS..MAX_DIGITS || value.precision() - value.scale() > MAX_DIGITS) return null
+        return try {
+            toCents(value)
+        } catch (_: ArithmeticException) {
+            null
+        }
     }
 
     /** Converts native cents to base cents with a rate meaning "one unit in base currency". */
