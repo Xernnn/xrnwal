@@ -249,6 +249,9 @@ bills; + adds a bill on that date.
 
 - Each bill keeps the rate it was recorded with, so history does not move when rates change.
 - Account balances are held natively and converted at the current rate for display and net assets.
+- A bill or transfer into an account in another currency keeps the amount it put there, worked out
+  at the rates of the moment it was saved or recorded. Bills saved before that are still worked out at
+  today's rate.
 
 ## Out of scope for the first build
 

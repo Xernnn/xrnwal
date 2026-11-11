@@ -256,9 +256,10 @@ class Repository(
             val knownTags = dao.tagsNow().map { it.id }.toSet()
             val ledgers = dao.ledgersNow().mapTo(HashSet()) { it.id }
             val rates = dao.ratesNow()
+            val accounts = dao.accountsNow()
             dao.recurringNow().forEach { rule ->
                 val due = rule.due(now, ledgers)
-                due.forEach { addRuleBill(rule, it, knownTags, rates) }
+                due.forEach { addRuleBill(rule, it, knownTags, rates, accounts) }
                 if (due.isNotEmpty()) dao.put(rule.copy(generated = rule.generated + due.size))
             }
         }
@@ -269,12 +270,19 @@ class Repository(
         db.withTransaction {
             val knownTags = dao.tagsNow().map { it.id }.toSet()
             val rates = dao.ratesNow()
-            dates.forEach { addRuleBill(rule, it.atTime(rule.minuteOfDay / 60, rule.minuteOfDay % 60), knownTags, rates) }
+            val accounts = dao.accountsNow()
+            dates.forEach { addRuleBill(rule, it.atTime(rule.minuteOfDay / 60, rule.minuteOfDay % 60), knownTags, rates, accounts) }
         }
     }
 
-    private suspend fun addRuleBill(rule: Recurring, at: LocalDateTime, knownTags: Set<Long>, rates: List<CurrencyRate>) {
-        val billId = dao.put(rule.billAt(at, store.settings.value.baseCurrency, rates))
+    private suspend fun addRuleBill(
+        rule: Recurring,
+        at: LocalDateTime,
+        knownTags: Set<Long>,
+        rates: List<CurrencyRate>,
+        accounts: List<Account>,
+    ) {
+        val billId = dao.put(rule.billAt(at, store.settings.value.baseCurrency, rates, accounts))
         dao.putBillTags(rule.tags.filter { it in knownTags }.map { BillTag(billId, it) })
     }
 

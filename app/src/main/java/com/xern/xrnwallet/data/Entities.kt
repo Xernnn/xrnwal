@@ -100,7 +100,12 @@ data class Bill(
     /** Value of one unit in the base currency when recorded, so history keeps its value. */
     val rate: Double = 1.0,
     val feeCents: Long = 0,
-    /** Amount landing in the receiving account of a cross-currency transfer. */
+    /**
+     * The amount in the currency of the account it moves money in, when that isn't the bill's own: a
+     * transfer's receiving account, or the account of an expense or income. Fixed as the bill is saved,
+     * so refreshing rates doesn't move that account's balance. Null for bills saved before, which are
+     * still worked out at today's rate. See [Snapshot.fixedAmount].
+     */
     val toAmountCents: Long? = null,
     val note: String = "",
     val photo: String? = null,
@@ -187,9 +192,10 @@ data class Recurring(
     /**
      * The bill this rule records at [at], valued by [rates] against [base]. Both come from whoever reads
      * the rule, out of the database: the snapshot the screens use is still empty while the app starts,
-     * which is when most rules come due, and an empty one values every currency at one of the base.
+     * which is when most rules come due, and an empty one values every currency at one of the base. Into
+     * one of [accounts] in another currency, what it puts there is fixed now, as for a bill saved by hand.
      */
-    fun billAt(at: LocalDateTime, base: String, rates: List<CurrencyRate>): Bill = Bill(
+    fun billAt(at: LocalDateTime, base: String, rates: List<CurrencyRate>, accounts: List<Account>): Bill = Bill(
         ledgerId = ledgerId,
         type = type,
         categoryId = categoryId,
@@ -202,7 +208,7 @@ data class Recurring(
         atMillis = BillCsv.millisOf(at),
         inBudget = inBudget,
         recurringId = id,
-    )
+    ).let { it.copy(toAmountCents = Snapshot(accounts = accounts, rates = rates, baseCurrency = base).fixedAmount(it)) }
 
     /**
      * The bill already recorded for each of [dates], such as those imported from another app, by date.

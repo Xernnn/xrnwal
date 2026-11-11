@@ -566,12 +566,60 @@ class DomainTest {
             inBudget = false,
         )
         val at = LocalDate.of(2026, 11, 1).atTime(8, 0)
-        val bill = rent.billAt(at, "AUD", listOf(CurrencyRate("USD", 1.5), CurrencyRate("VND", 0.00006)))
+        val bill = rent.billAt(at, "AUD", listOf(CurrencyRate("USD", 1.5), CurrencyRate("VND", 0.00006)), emptyList())
         assertEquals(0.00006, bill.rate, 0.0)
         // 5,000,000 dong is 300 dollars. At one to one, as an unloaded snapshot has it, it was 5,000,000 dollars.
         assertEquals(30_000L, bill.baseCents)
         assertEquals(listOf(4L, at, "Rent", false), listOf(bill.recurringId, bill.dateTime, bill.note, bill.inBudget))
-        assertEquals(1.0, rent.billAt(at, "VND", listOf(CurrencyRate("AUD", 16_500.0))).rate, 0.0)
+        assertEquals(1.0, rent.billAt(at, "VND", listOf(CurrencyRate("AUD", 16_500.0)), emptyList()).rate, 0.0)
+    }
+
+    @Test
+    fun aBillIntoAnAccountInAnotherCurrencyKeepsWhatItPutThereWhenRatesChange() {
+        val cash = Account(id = 1, name = "Cash", currency = "AUD")
+        val dong = Account(id = 2, name = "Vietcombank", currency = "VND")
+        val card = Account(id = 3, name = "US card", currency = "USD")
+        val then = Snapshot(
+            accounts = listOf(cash, dong, card),
+            rates = listOf(CurrencyRate("VND", 0.00006), CurrencyRate("USD", 1.5)),
+        )
+        // A$100 sent home, landing as 1,666,666.67 dong at the rate of the day.
+        val sent = Bill(
+            id = 1, ledgerId = 1, type = BillType.TRANSFER, accountId = 1, toAccountId = 2,
+            amountCents = 10_000, currency = "AUD", atMillis = 0,
+        )
+        // A$30 of shopping paid from the dong account.
+        val spent = Bill(id = 2, ledgerId = 1, type = BillType.EXPENSE, accountId = 2, amountCents = 3_000, currency = "AUD", atMillis = 0)
+        val saved = listOf(sent, spent).map { it.copy(toAmountCents = then.fixedAmount(it)) }
+        assertEquals(listOf(166_666_667L, 50_000_000L), saved.map { it.toAmountCents })
+        assertEquals(116_666_667L, then.copy(bills = saved).balance(dong))
+        // The dong weakens and the rates are refreshed. What landed in the account stays as it was.
+        val now = then.copy(bills = saved, rates = listOf(CurrencyRate("VND", 0.00005), CurrencyRate("USD", 1.5)))
+        assertEquals(116_666_667L, now.balance(dong))
+        assertEquals(-10_000L, now.balance(cash))
+        // Nothing to fix within one currency.
+        assertNull(now.fixedAmount(spent.copy(accountId = 1)))
+
+        // Edited, it keeps the rate it was recorded at: unchanged, or scaled with its amount.
+        assertEquals(166_666_667L, now.fixedAmount(saved[0].copy(note = "Mum"), before = saved[0]))
+        assertEquals(333_333_334L, now.fixedAmount(saved[0].copy(amountCents = 20_000), before = saved[0]))
+        // Into another account, it is worked out again for that one, at today's rate.
+        assertEquals(2_000L, now.fixedAmount(saved[1].copy(accountId = 3), before = saved[1]))
+        assertNull(now.fixedAmount(saved[1].copy(accountId = 1), before = saved[1]))
+
+        // The account changes currency: what it holds is re-expressed, as its balance is, at today's rates.
+        val inDollars = now.fixedAmountsIn(dong, "USD")
+        assertEquals(listOf(1L to 5_556L, 2L to 1_667L), inDollars.map { it.id to it.toAmountCents })
+        assertEquals(listOf(null, null), now.fixedAmountsIn(dong, "AUD").map { it.toAmountCents })
+        assertEquals(emptyList<Bill>(), now.fixedAmountsIn(cash, "USD"))
+
+        // A recurring transfer home is fixed as it is recorded.
+        val monthly = Recurring(
+            ledgerId = 1, type = BillType.TRANSFER, accountId = 1, toAccountId = 2, amountCents = 10_000, currency = "AUD",
+            startEpochDay = LocalDate.of(2026, 11, 1).toEpochDay(),
+        )
+        val recorded = monthly.billAt(LocalDate.of(2026, 11, 1).atTime(8, 0), "AUD", now.rates, now.accounts)
+        assertEquals(200_000_000L, recorded.toAmountCents)
     }
 
     @Test

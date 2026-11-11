@@ -225,7 +225,7 @@ fun BillEditScreen(id: Long, date: Long, initialType: Int) {
             atMillis = BillCsv.millisOf(at),
             inBudget = existing?.inBudget ?: true,
             recurringId = existing?.recurringId,
-        )
+        ).let { it.copy(toAmountCents = s.fixedAmount(it, before = existing)) }
         saving = true
         scope.launch {
             repo.saveBill(bill, tagIds)
@@ -822,7 +822,8 @@ fun BillDetailScreen(id: Long) {
                 dialog = null
             }
             "account" -> AccountDialog(s.accounts.filter { !it.archived }, allowNone = bill.type != BillType.TRANSFER, onDismiss = { dialog = null }) {
-                repo.updateBill(bill.copy(accountId = it))
+                val moved = bill.copy(accountId = it)
+                repo.updateBill(moved.copy(toAmountCents = s.fixedAmount(moved, before = bill)))
                 dialog = null
             }
         }
