@@ -270,6 +270,23 @@ class SyncServerTest(unittest.TestCase):
     def put_as(self, password):
         return self.call("PUT", "/state", document("a"), {"If-Match": '"0"'}, password=password)
 
+    def guess(self, forwarded, n=0):
+        return self.call("GET", "/state", password=f"guess{n}", headers={"X-Forwarded-For": forwarded})[0]
+
+    def test_a_made_up_forwarded_hop_is_not_a_new_address(self):
+        for i in range(10):  # what a proxy that appends would pass on: the caller's own header first
+            self.assertEqual(401, self.guess(f"198.51.100.{i}, 203.0.113.20", i))
+        self.assertEqual(429, self.guess("198.51.100.200, 203.0.113.20", 10))
+        self.assertEqual(401, self.guess("203.0.113.20, 203.0.113.21"))  # another caller isn't held
+
+    def test_an_ipv6_guesser_is_its_64_not_each_address_in_it(self):
+        for i in range(10):
+            self.assertEqual(401, self.guess(f"2001:db8:1:2::{i + 1:x}", i))
+        self.assertEqual(429, self.guess("2001:db8:1:2:aaaa::1", 10))
+        self.assertEqual(401, self.guess("2001:db8:1:3::1"))  # the /64 next door isn't held
+        self.assertEqual(401, self.guess("::ffff:203.0.113.40"))  # an IPv4 caller written as IPv6
+        self.assertIn("203.0.113.40", srv.failures)  # ...is counted as that IPv4 address
+
     def test_too_many_wrong_passwords_lock_the_address_out(self):
         for _ in range(srv.FAIL_LIMIT):
             self.assertEqual(self.call("GET", "/state", password="wrong")[0], 401)

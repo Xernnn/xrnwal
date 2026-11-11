@@ -228,9 +228,10 @@ class Repository(
         db.withTransaction {
             val knownTags = dao.tagsNow().map { it.id }.toSet()
             val ledgers = dao.ledgersNow().mapTo(HashSet()) { it.id }
+            val rates = dao.ratesNow()
             dao.recurringNow().forEach { rule ->
                 val due = rule.due(now, ledgers)
-                due.forEach { addRuleBill(rule, it, knownTags) }
+                due.forEach { addRuleBill(rule, it, knownTags, rates) }
                 if (due.isNotEmpty()) dao.put(rule.copy(generated = rule.generated + due.size))
             }
         }
@@ -240,27 +241,13 @@ class Repository(
     suspend fun recordDates(rule: Recurring, dates: List<LocalDate>) {
         db.withTransaction {
             val knownTags = dao.tagsNow().map { it.id }.toSet()
-            dates.forEach { addRuleBill(rule, it.atTime(rule.minuteOfDay / 60, rule.minuteOfDay % 60), knownTags) }
+            val rates = dao.ratesNow()
+            dates.forEach { addRuleBill(rule, it.atTime(rule.minuteOfDay / 60, rule.minuteOfDay % 60), knownTags, rates) }
         }
     }
 
-    private suspend fun addRuleBill(rule: Recurring, at: LocalDateTime, knownTags: Set<Long>) {
-        val billId = dao.put(
-            Bill(
-                ledgerId = rule.ledgerId,
-                type = rule.type,
-                categoryId = rule.categoryId,
-                accountId = rule.accountId,
-                toAccountId = rule.toAccountId,
-                amountCents = rule.amountCents,
-                currency = rule.currency,
-                rate = snapshot.value.rate(rule.currency),
-                note = rule.note,
-                atMillis = BillCsv.millisOf(at),
-                inBudget = rule.inBudget,
-                recurringId = rule.id,
-            ),
-        )
+    private suspend fun addRuleBill(rule: Recurring, at: LocalDateTime, knownTags: Set<Long>, rates: List<CurrencyRate>) {
+        val billId = dao.put(rule.billAt(at, store.settings.value.baseCurrency, rates))
         dao.putBillTags(rule.tags.filter { it in knownTags }.map { BillTag(billId, it) })
     }
 

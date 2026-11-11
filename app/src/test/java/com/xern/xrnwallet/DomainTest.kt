@@ -107,6 +107,24 @@ class DomainTest {
     }
 
     @Test
+    fun thousandsMarkedTheWayAmountsAreShownAreRead() {
+        assertEquals(150000000L, Money.parse("1.500.000"))
+        assertEquals(150000000L, Money.parse("1,500,000"))
+        assertEquals(-150000000L, Money.parse("-1.500.000"))
+        assertNull(Money.parse("1.2.3"))
+        assertNull(Money.parse("1.500.00"))
+    }
+
+    @Test
+    fun aNumberTooLargeForAnAmountIsRefusedNotThrown() {
+        assertNull(Money.parse("99999999999999999999"))
+        assertNull(Money.parse("1e30"))
+        assertNull(Money.parse("1e999999999"))
+        assertNull(Money.parse("1e-999999999"))
+        assertEquals(1500000000L, Money.parse("1.5E+7"))
+    }
+
+    @Test
     fun calculatorRespectsPrecedence() {
         assertEquals("15.00", Calculator.evaluate("12+3").toString())
         assertEquals("14.00", Calculator.evaluate("2+3×4").toString())
@@ -533,6 +551,27 @@ class DomainTest {
         assertEquals(sundays.take(2), weekly.copy(times = 2).due(now, setOf(2L)))
         // Its ledger was deleted: bills there would count in every total but show in no ledger.
         assertEquals(emptyList<java.time.LocalDateTime>(), weekly.due(now, setOf(1L)))
+    }
+
+    @Test
+    fun aRuleValuesItsBillWithTheRatesItIsGiven() {
+        val rent = Recurring(
+            id = 4,
+            ledgerId = 2,
+            type = BillType.EXPENSE,
+            amountCents = 500_000_000,
+            currency = "VND",
+            startEpochDay = LocalDate.of(2026, 11, 1).toEpochDay(),
+            note = "Rent",
+            inBudget = false,
+        )
+        val at = LocalDate.of(2026, 11, 1).atTime(8, 0)
+        val bill = rent.billAt(at, "AUD", listOf(CurrencyRate("USD", 1.5), CurrencyRate("VND", 0.00006)))
+        assertEquals(0.00006, bill.rate, 0.0)
+        // 5,000,000 dong is 300 dollars. At one to one, as an unloaded snapshot has it, it was 5,000,000 dollars.
+        assertEquals(30_000L, bill.baseCents)
+        assertEquals(listOf(4L, at, "Rent", false), listOf(bill.recurringId, bill.dateTime, bill.note, bill.inBudget))
+        assertEquals(1.0, rent.billAt(at, "VND", listOf(CurrencyRate("AUD", 16_500.0))).rate, 0.0)
     }
 
     @Test

@@ -121,7 +121,8 @@ object BillCsv {
                 subcategory = cell("subcategory"),
                 cents = kotlin.math.abs(cents),
                 currency = cell("currency").uppercase().ifEmpty { defaultCurrency },
-                rate = cell("rate").replace(',', '.').toDoubleOrNull(),
+                // Only a positive number is a rate. Zero would count the bill as nothing, and "NaN" can't be added up.
+                rate = cell("rate").replace(',', '.').toDoubleOrNull()?.takeIf { it.isFinite() && it > 0 },
                 account = cell("account").ifEmpty { ends?.first.orEmpty() },
                 toAccount = ends?.second ?: cell("toaccount"),
                 feeCents = Money.parse(cell("fee")) ?: 0,

@@ -162,6 +162,26 @@ data class Recurring(
     }
 
     /**
+     * The bill this rule records at [at], valued by [rates] against [base]. Both come from whoever reads
+     * the rule, out of the database: the snapshot the screens use is still empty while the app starts,
+     * which is when most rules come due, and an empty one values every currency at one of the base.
+     */
+    fun billAt(at: LocalDateTime, base: String, rates: List<CurrencyRate>): Bill = Bill(
+        ledgerId = ledgerId,
+        type = type,
+        categoryId = categoryId,
+        accountId = accountId,
+        toAccountId = toAccountId,
+        amountCents = amountCents,
+        currency = currency,
+        rate = if (currency == base) 1.0 else rates.firstOrNull { it.code == currency }?.rate ?: 1.0,
+        note = note,
+        atMillis = BillCsv.millisOf(at),
+        inBudget = inBudget,
+        recurringId = id,
+    )
+
+    /**
      * The bill already recorded for each of [dates], such as those imported from another app, by date.
      * It must match what the rule would write, with two allowances. It may sit a day off, because an app
      * counting 24-hour days drifts a day across daylight saving. It may be on another account, because
