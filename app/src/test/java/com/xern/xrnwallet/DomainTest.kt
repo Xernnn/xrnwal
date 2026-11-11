@@ -554,6 +554,27 @@ class DomainTest {
     }
 
     @Test
+    fun aRuleValuesItsBillWithTheRatesItIsGiven() {
+        val rent = Recurring(
+            id = 4,
+            ledgerId = 2,
+            type = BillType.EXPENSE,
+            amountCents = 500_000_000,
+            currency = "VND",
+            startEpochDay = LocalDate.of(2026, 11, 1).toEpochDay(),
+            note = "Rent",
+            inBudget = false,
+        )
+        val at = LocalDate.of(2026, 11, 1).atTime(8, 0)
+        val bill = rent.billAt(at, "AUD", listOf(CurrencyRate("USD", 1.5), CurrencyRate("VND", 0.00006)))
+        assertEquals(0.00006, bill.rate, 0.0)
+        // 5,000,000 dong is 300 dollars. At one to one, as an unloaded snapshot has it, it was 5,000,000 dollars.
+        assertEquals(30_000L, bill.baseCents)
+        assertEquals(listOf(4L, at, "Rent", false), listOf(bill.recurringId, bill.dateTime, bill.note, bill.inBudget))
+        assertEquals(1.0, rent.billAt(at, "VND", listOf(CurrencyRate("AUD", 16_500.0))).rate, 0.0)
+    }
+
+    @Test
     fun photosNoBillNamesAreClearedOutOnceADayOld() {
         val now = 1_800_000_000_000L
         fun photo(name: String, ageMillis: Long) =
