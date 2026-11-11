@@ -7,6 +7,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import socket
 import tempfile
 import threading
 import time
@@ -278,6 +279,11 @@ class SyncServerTest(unittest.TestCase):
         self.put(document("a"), '"0"')
         srv.prune_photos("owner", force=True)
         self.assertEqual(json.loads(self.call("GET", "/photos")[1]), ["new.jpg"])
+
+    def test_an_unparseable_request_gets_an_answer(self):
+        with socket.create_connection(("127.0.0.1", self.httpd.server_address[1]), timeout=10) as s:
+            s.sendall(b"GARBAGE\r\n\r\n")
+            self.assertIn(b"400", s.recv(200))
 
     def test_everything_needs_the_login_except_health(self):
         for method, path in (("GET", "/state"), ("GET", "/versions"), ("GET", "/versions/1"),
