@@ -64,6 +64,20 @@ class CsvTest {
     }
 
     @Test
+    fun aRateThatIsNotAPositiveNumberCountsAsMissing() {
+        val file = "Date,Amount,Currency,Rate\r\n" +
+            "2026-10-01,10,VND,0\r\n" +
+            "2026-10-02,10,VND,-2\r\n" +
+            "2026-10-03,10,VND,NaN\r\n" +
+            "2026-10-04,10,VND,Infinity\r\n" +
+            "2026-10-05,10,VND,\"0,00006\"\r\n"
+        val rows = BillCsv.read(file, "AUD").rows
+        assertEquals(listOf(null, null, null, null, 0.00006), rows.map { it.rate })
+        // So the import asks for a rate first, instead of counting every bill as nothing, or not opening again.
+        assertEquals(listOf("VND"), BillCsv.missingRates(rows, "AUD", emptySet()))
+    }
+
+    @Test
     fun aNewAccountTakesACurrencyOnlyWhenAllItsBillsAgree() {
         val rows = BillCsv.read(otherAppExport, "AUD").rows
         val paypal = rows[0].copy(account = "PayPal", currency = "USD")
