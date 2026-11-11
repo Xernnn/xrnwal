@@ -34,6 +34,7 @@ import androidx.fragment.app.FragmentActivity
 import com.xern.xrnwallet.MainActivity
 import com.xern.xrnwallet.data.AppLock
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -194,15 +195,33 @@ fun LockScreen(activity: MainActivity, onUnlock: () -> Unit) {
         if (checking) return
         checking = true
         scope.launch {
-            val tried = withContext(Dispatchers.Default) { AppLock.attempt(repo.store.settings.value, pattern, secret) }
+            val tried = withContext(Dispatchers.Default) {
+                AppLock.attempt(repo.store.settings.value, pattern, secret, System.currentTimeMillis())
+            }
             repo.store.update { it.withLockOf(tried.settings) }
             checking = false
             if (tried.opened) onUnlock() else error = true
         }
     }
 
+    fun biometricOpened() {
+        repo.store.update(AppLock::opened)
+        onUnlock()
+    }
+
+    var wait by remember { mutableLongStateOf(AppLock.waitLeft(settings, System.currentTimeMillis())) }
+    LaunchedEffect(settings.unlockMisses, settings.lastMissAt) {
+        while (true) {
+            val now = System.currentTimeMillis()
+            if (settings.lastMissAt > now) repo.store.update { AppLock.anchored(it, now) }
+            wait = AppLock.waitLeft(settings, now)
+            if (wait == 0L) break
+            delay(minOf(wait, 1000L))
+        }
+    }
+
     LaunchedEffect(Unit) {
-        if (settings.biometric && canUseBiometric(activity)) promptBiometric(activity, onUnlock)
+        if (settings.biometric && canUseBiometric(activity)) promptBiometric(activity, ::biometricOpened)
     }
     BackHandler { activity.moveTaskToBack(true) }
     Column(
@@ -217,10 +236,14 @@ fun LockScreen(activity: MainActivity, onUnlock: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        if (usePattern && settings.patternHash != null) {
+        if (wait > 0) {
+            Text("Too many wrong tries", style = MaterialTheme.typography.titleMedium)
+            Muted("Try again in ${countdown(wait)}", Modifier.padding(top = 12.dp))
+        } else if (usePattern && settings.patternHash != null) {
             PatternPad("Draw your pattern", error) { attempt(it, pattern = true) }
         } else if (settings.pinHash != null) {
-            PinPad("Enter your PIN", error, settings.pinLength.coerceIn(AppLock.PIN_MIN, AppLock.PIN_MAX)) { attempt(it, pattern = false) }
+            val length = settings.pinLength.coerceIn(AppLock.PIN_MIN, AppLock.PIN_MAX)
+            PinPad("Enter your PIN", error, length) { attempt(it, pattern = false) }
         }
         Row(Modifier.padding(top = 24.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             if (settings.pinHash != null && settings.patternHash != null) {
@@ -230,9 +253,19 @@ fun LockScreen(activity: MainActivity, onUnlock: () -> Unit) {
                 }
             }
             if (settings.biometric && canUseBiometric(activity)) {
-                Pill("Use biometrics", false) { promptBiometric(activity, onUnlock) }
+                Pill("Use biometrics", false) { promptBiometric(activity, ::biometricOpened) }
             }
         }
+    }
+}
+
+/** "0:30", "4:00" or "1:04:00", rounded up so it never shows 0:00 while still waiting. */
+private fun countdown(millis: Long): String {
+    val seconds = (millis + 999) / 1000
+    return if (seconds >= 3600) {
+        "%d:%02d:%02d".format(seconds / 3600, seconds % 3600 / 60, seconds % 60)
+    } else {
+        "%d:%02d".format(seconds / 60, seconds % 60)
     }
 }
 
@@ -309,6 +342,7 @@ fun PasswordScreen() {
                 }
             }
             Muted("Set two methods, so you have a fallback. A forgotten password cannot be recovered, and the app would need clearing.")
+            Muted("After five wrong tries the lock waits 30 seconds before the next, and twice as long after each further miss.")
             Muted("While a lock is set, widgets hide amounts and the recent apps screen shows no preview of this app.")
         }
     }

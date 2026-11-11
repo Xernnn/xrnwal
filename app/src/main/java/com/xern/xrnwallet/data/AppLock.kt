@@ -58,6 +58,11 @@ data class UnlockTry(val settings: Settings, val opened: Boolean)
 object AppLock {
     const val PIN_MIN = 4
     const val PIN_MAX = 8
+    const val FREE_TRIES = 5
+    const val FIRST_WAIT_MILLIS = 30_000L
+
+    /** About a year. Only so the doubling can't overflow. */
+    private const val MOST_DOUBLINGS = 20
 
     fun withPin(settings: Settings, pin: String): Settings {
         require(pin.length in PIN_MIN..PIN_MAX && pin.all { it in '0'..'9' }) { "A PIN is 4 to 8 digits" }
@@ -66,18 +71,40 @@ object AppLock {
 
     fun withPattern(settings: Settings, pattern: String): Settings = settings.copy(patternHash = LockSecret.hash(pattern))
 
+    /** The wait after [misses] wrong tries in a row: none for the first four, then 30 seconds, doubled with each miss after. */
+    fun waitAfter(misses: Int): Long =
+        if (misses < FREE_TRIES) 0 else FIRST_WAIT_MILLIS shl (misses - FREE_TRIES).coerceAtMost(MOST_DOUBLINGS)
+
+    /** How long until the next try, at [now]. Never longer than the wait itself, so a clock set back can't stretch it. */
+    fun waitLeft(settings: Settings, now: Long): Long {
+        val wait = waitAfter(settings.unlockMisses)
+        return (settings.lastMissAt + wait - now).coerceIn(0, wait)
+    }
+
+    /** With the clock set back past the last miss, the wait counts from [now], or it would last until the clock caught up. */
+    fun anchored(settings: Settings, now: Long): Settings =
+        if (settings.lastMissAt > now) settings.copy(lastMissAt = now) else settings
+
+    /** After a way in other than a PIN or pattern, such as biometrics. */
+    fun opened(settings: Settings): Settings = settings.copy(unlockMisses = 0, lastMissAt = 0)
+
     /**
-     * Tries [secret] as the pattern when [pattern], else as the PIN. One kept the old way is kept again
-     * the new way once it has opened the app, which is the only time this phone has it.
+     * Tries [secret] as the pattern when [pattern], else as the PIN, at [now]. Both count against one
+     * limit, kept in the settings so closing the app doesn't reset it, and nothing is tried during a
+     * wait. One kept the old way is kept again the new way once it has opened the app, which is the only
+     * time this phone has it.
      */
-    fun attempt(settings: Settings, pattern: Boolean, secret: String): UnlockTry {
+    fun attempt(settings: Settings, pattern: Boolean, secret: String, now: Long): UnlockTry {
+        if (waitLeft(settings, now) > 0) return UnlockTry(settings, false)
         val stored = (if (pattern) settings.patternHash else settings.pinHash) ?: return UnlockTry(settings, false)
-        if (!LockSecret.matches(stored, settings.lockSalt, secret)) return UnlockTry(settings, false)
+        if (!LockSecret.matches(stored, settings.lockSalt, secret)) {
+            return UnlockTry(settings.copy(unlockMisses = settings.unlockMisses + 1, lastMissAt = now), false)
+        }
         val kept = when {
             LockSecret.isCurrent(stored) -> settings
             pattern -> settings.copy(patternHash = LockSecret.hash(secret))
             else -> settings.copy(pinHash = LockSecret.hash(secret))
         }
-        return UnlockTry(kept, true)
+        return UnlockTry(opened(kept), true)
     }
 }

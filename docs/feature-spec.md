@@ -160,9 +160,11 @@ Name, time, repeat (Daily, Weekly, Monthly), notification content presets or cus
 
 Digital (PIN of 4 to 8 digits), Gesture (pattern), Biometric unlock. Hint to set two methods. A PIN
 or pattern is kept as PBKDF2-HMAC-SHA256; one kept by an earlier build as a single SHA-256 is kept the
-new way the first time it opens the app. While any lock is set, widgets print dots instead of amounts
-and Recents keeps no picture of the app. Both reach past the
-lock screen, so the session being unlocked changes neither. Screenshots stay allowed on Android 13
+new way the first time it opens the app. After five wrong PINs or patterns in a row the lock screen
+waits 30 seconds, doubling with each further miss; closing the app doesn't end the wait, and
+biometrics still open it. While any lock is set, widgets print dots instead of amounts and Recents
+keeps no picture of the app. Both reach past the lock screen, so the session being unlocked changes
+neither. Screenshots stay allowed on Android 13
 and later. Older versions have no way to leave out only the Recents picture, so screenshots are
 blocked there.
 

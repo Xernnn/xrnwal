@@ -58,6 +58,9 @@ data class Settings(
     val biometric: Boolean = false,
     /** The PIN's digits, so the lock screen tries it as the last is typed. Earlier builds' PINs had 4. */
     val pinLength: Int = AppLock.PIN_MIN,
+    /** Wrong PINs and patterns in a row, and when the last was. See [AppLock.waitLeft]. */
+    val unlockMisses: Int = 0,
+    val lastMissAt: Long = 0,
     val ratesUpdatedAt: Long = 0,
 ) {
     val moneyFormat: MoneyFormat
@@ -96,6 +99,8 @@ data class Settings(
         lockSalt = other.lockSalt,
         biometric = other.biometric,
         pinLength = other.pinLength,
+        unlockMisses = other.unlockMisses,
+        lastMissAt = other.lastMissAt,
     )
 
     companion object {
