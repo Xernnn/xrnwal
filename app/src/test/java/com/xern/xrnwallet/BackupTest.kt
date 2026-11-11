@@ -15,7 +15,10 @@ import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import org.w3c.dom.Element
+import java.io.File
 import java.time.LocalDate
+import javax.xml.parsers.DocumentBuilderFactory
 
 class BackupTest {
     private val json = Json { encodeDefaults = true }
@@ -126,5 +129,26 @@ class BackupTest {
             "it was made by a newer version of the app",
             refusal(backup().replaceFirst("\"version\":1", "\"version\":2")),
         )
+    }
+
+    @Test
+    fun cloudBackupTakesNothingWhileANewPhoneCanStillBeGivenEverything() {
+        fun read(path: String): Element =
+            DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }.newDocumentBuilder().parse(File(path)).documentElement
+        val android = "http://schemas.android.com/apk/res/android"
+        val application = read("src/main/AndroidManifest.xml").getElementsByTagName("application").item(0) as Element
+        // All off before Android 12. From 12 it is deprecated, and on some phones stops only the cloud.
+        assertEquals("false", application.getAttributeNS(android, "allowBackup"))
+        assertEquals("@xml/data_extraction_rules", application.getAttributeNS(android, "dataExtractionRules"))
+        val rules = read("src/main/res/xml/data_extraction_rules.xml")
+        fun section(name: String) = rules.getElementsByTagName(name).let { if (it.length == 0) null else it.item(0) as Element }
+        val cloud = section("cloud-backup") ?: error("no cloud-backup")
+        val excluded = (0 until cloud.getElementsByTagName("exclude").length).map {
+            (cloud.getElementsByTagName("exclude").item(it) as Element).let { e -> e.getAttribute("domain") to e.getAttribute("path") }
+        }
+        assertEquals(listOf("root", "file", "database", "sharedpref", "external", "device_root").map { it to "." }, excluded)
+        assertEquals(0, cloud.getElementsByTagName("include").length)
+        // A move to a new phone keeps its default, everything.
+        assertNull(section("device-transfer"))
     }
 }
