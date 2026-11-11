@@ -399,15 +399,15 @@ class Repository(
     }
 
     /**
-     * What the home server keeps: a backup with the app lock left out and photos named rather than
-     * included. Rows are in a fixed order, because the sync compares this text to see what changed.
+     * What the home server keeps: a backup, with photos named rather than included. Rows are in a
+     * fixed order, because the sync compares this text to see what changed.
      */
     suspend fun syncDocument(): String = withContext(Dispatchers.IO) { db.withTransaction { document() } }
 
     /** [syncDocument] inside a transaction already open. */
     private suspend fun document(): String = json.encodeToString(
         Backup(
-            settings = store.exportWithoutLock(),
+            settings = store.export(),
             ledgers = dao.ledgersNow().sortedBy { it.id },
             accounts = dao.accountsNow().sortedBy { it.id },
             categories = dao.categoriesNow().sortedBy { it.id },
@@ -437,13 +437,13 @@ class Repository(
         PhotoFiles.sweep(File(context.filesDir, "photos"), dao.billsNow(), System.currentTimeMillis())
     }
 
-    /** Replaces everything with a backup file, app lock included. */
+    /** Replaces everything with a backup file. This phone keeps its own app lock, as a file holds none. */
     suspend fun restore(text: String) {
-        replace(text, keepLock = false, expected = null)
+        replace(text, expected = null)
     }
 
     /** For [SyncedWallet.replaceWith]: a server copy, which leaves the app lock out, so this phone keeps its own. */
-    suspend fun replaceIfUnchanged(text: String, expected: String): String? = replace(text, keepLock = true, expected)
+    suspend fun replaceIfUnchanged(text: String, expected: String): String? = replace(text, expected)
 
     /**
      * Replaces everything with a backup and returns the hash of the new [syncDocument]. The file is
@@ -452,7 +452,7 @@ class Repository(
      * change and the new hash are one transaction, so a bill saved meanwhile waits for it and lands
      * after, still to be sent.
      */
-    private suspend fun replace(text: String, keepLock: Boolean, expected: String?): String? = withContext(Dispatchers.IO) {
+    private suspend fun replace(text: String, expected: String?): String? = withContext(Dispatchers.IO) {
         val backup = BackupReader.read(text)
         val decoder = Base64.getDecoder()
         val photos = backup.photos.mapValues { decoder.decode(it.value) }
@@ -476,7 +476,7 @@ class Repository(
             dao.putChecklistItems(backup.checklistItems)
             dao.putReminders(backup.reminders)
             dao.putRates(backup.rates)
-            if (keepLock) store.restoreKeepingLock(backup.settings) else store.restore(backup.settings)
+            store.restore(backup.settings)
             sha256(document())
         } ?: return@withContext null
         Reminders.scheduleAll(context, backup.reminders)

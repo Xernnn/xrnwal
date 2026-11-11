@@ -737,7 +737,7 @@ fun BackupScreen() {
                 Divider()
                 ListRow("Restore from a file", subtitle = "Replaces everything on this phone") { opener.launch(arrayOf("*/*")) }
             }
-            Muted("A backup file stays wherever you put it, and holds everything including the app lock.")
+            Muted("A backup file stays wherever you put it, and holds everything but the app lock, which stays with this phone.")
         }
     }
     pendingRestore?.let { uri ->

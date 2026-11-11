@@ -268,7 +268,8 @@ copy the server replaces is kept: the last 20, and the first of each day for 60 
 - The app lock never leaves the phone. Taking a copy from the server keeps this phone's own lock, so
   a new phone starts with no lock until one is set.
 - The login is kept encrypted with a key held in the phone's keystore. Addresses must be `https://`.
-- Backup files are separate from sync. They hold everything, including the app lock.
+- Backup files are separate from sync. They hold everything but the app lock, so restoring one keeps
+  this phone's own lock too.
 
 When nothing changed on the phone, a newer server copy simply comes down. Nothing is overwritten
 otherwise:

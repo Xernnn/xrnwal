@@ -1,6 +1,7 @@
 package com.xern.xrnwallet.data
 
 import android.content.Context
+import android.content.SharedPreferences
 import com.xern.xrnwallet.domain.Belonging
 import com.xern.xrnwallet.domain.DecimalMode
 import com.xern.xrnwallet.domain.MoneyFormat
@@ -82,7 +83,7 @@ data class Settings(
         else -> null
     }
 
-    /** The app lock belongs to this phone. It is never sent to the home server. */
+    /** The app lock belongs to this phone. It is never sent to the home server or put in a backup file. */
     fun withoutLock(): Settings = withLockOf(Settings())
 
     fun withLockOf(other: Settings): Settings = copy(
@@ -101,8 +102,9 @@ data class Settings(
     }
 }
 
-class SettingsStore(context: Context) {
-    private val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
+class SettingsStore(private val prefs: SharedPreferences) {
+    constructor(context: Context) : this(context.getSharedPreferences("settings", Context.MODE_PRIVATE))
+
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val state = MutableStateFlow(load())
 
@@ -118,17 +120,11 @@ class SettingsStore(context: Context) {
         prefs.edit().putString(KEY, json.encodeToString(next)).apply()
     }
 
-    fun export(): String = json.encodeToString(state.value)
+    /** What a backup file and the server's copy hold: everything but the app lock, which belongs to this phone. */
+    fun export(): String = json.encodeToString(state.value.withoutLock())
 
-    fun exportWithoutLock(): String = json.encodeToString(state.value.withoutLock())
-
+    /** Takes settings from a backup file or the server's copy, keeping this phone's own app lock. */
     fun restore(text: String) {
-        val restored = json.decodeFromString<Settings>(text)
-        state.value = restored
-        prefs.edit().putString(KEY, text).apply()
-    }
-
-    fun restoreKeepingLock(text: String) {
         val restored = json.decodeFromString<Settings>(text)
         update { restored.withLockOf(it) }
     }
