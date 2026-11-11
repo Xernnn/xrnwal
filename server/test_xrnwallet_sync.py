@@ -109,6 +109,25 @@ class SyncServerTest(unittest.TestCase):
         earlier = json.loads(self.call("GET", "/versions")[1])
         self.assertEqual([e["version"] for e in earlier], [1])
 
+    def test_a_page_on_another_site_cant_write_with_the_browsers_password(self):
+        # A browser once given the password in its own box sends it with whatever another
+        # site's page sends here.
+        for elsewhere in ({"Sec-Fetch-Site": "cross-site", "Origin": "https://evil.example"},
+                          {"Sec-Fetch-Site": "same-site", "Origin": "https://other.homeserver.example"},
+                          {"Origin": "https://evil.example"}):  # a browser from before Sec-Fetch-Site
+            self.assertEqual(self.call("PUT", "/state", document("Junk"), {"If-Match": "*", **elsewhere})[0], 403)
+            self.assertEqual(self.call("PUT", "/photos/junk.jpg", b"x", elsewhere, raw=True)[0], 403)
+        self.assertEqual(json.loads(self.call("GET", "/state")[1]), {})
+        self.assertEqual(json.loads(self.call("GET", "/photos")[1]), [])
+        # Reads and the phone (it sends neither header) still do.
+        self.assertEqual(self.call("GET", "/state", headers={"Sec-Fetch-Site": "cross-site"})[0], 200)
+        port = self.httpd.server_address[1]
+        for ours in ({"Sec-Fetch-Site": "same-origin", "Origin": "https://homeserver.example"},
+                     {"Origin": f"http://127.0.0.1:{port}"},
+                     {"Origin": "https://HomeServer.example", "X-Forwarded-Host": "homeserver.example:443"},
+                     {}):
+            self.assertEqual(self.call("PUT", "/state", document("Lunch"), {"If-Match": "*", **ours})[0], 200, ours)
+
     def test_unchanged_answers_304(self):
         self.put(document("a"), '"0"')
         self.assertEqual(self.call("GET", "/state", headers={"If-None-Match": '"1"'})[0], 304)
