@@ -24,6 +24,21 @@ object AccountKind {
     const val CREDIT = 1
 }
 
+private const val MINUTES_IN_DAY = 24 * 60
+
+/** Dates with a year of four digits. A rule starting far beyond them works out steps past the last date there is. */
+private val CALENDAR = LocalDate.of(1, 1, 1).toEpochDay()..LocalDate.of(9999, 12, 31).toEpochDay()
+
+/** Why a repeat stored as [kind] and [value] can't be worked out, or null. */
+private fun repeatProblem(kind: String, value: Int): String? {
+    val known = RepeatKind.entries.firstOrNull { it.name == kind } ?: return "repeats \"$kind\", which this app doesn't know"
+    return when {
+        known == RepeatKind.MONTHLY && value < 1 -> "repeats monthly on day $value"
+        known == RepeatKind.WEEKLY && value !in 1..7 -> "repeats weekly on weekday $value, not 1 to 7"
+        else -> null
+    }
+}
+
 @Serializable
 @Entity
 data class Ledger(
@@ -142,6 +157,14 @@ data class Recurring(
     val remaining: Int? get() = if (times == 0) null else (times - generated).coerceAtLeast(0)
     val tags: List<Long> get() = tagIds.split(',').mapNotNull { it.trim().toLongOrNull() }
 
+    /** What in a rule from a file or the server this app couldn't work out, or null. See [Settings.problem]. */
+    fun problem(): String? = when {
+        repeatProblem(repeatKind, repeatValue) != null -> "a recurring item ${repeatProblem(repeatKind, repeatValue)}"
+        minuteOfDay !in 0 until MINUTES_IN_DAY -> "a recurring item is due at minute $minuteOfDay of the day"
+        startEpochDay !in CALENDAR -> "a recurring item starts on no date the calendar has"
+        else -> null
+    }
+
     /** The dates of this rule's steps [from] up to, but not including, [until]. */
     fun dates(from: Int, until: Int): List<LocalDate> = (from until until).map { rule.occurrence(start, it) }
 
@@ -229,6 +252,14 @@ data class SavingsPlan(
     val planType: SavingsType get() = SavingsType.valueOf(type)
     val rule: RepeatRule get() = RepeatRule(RepeatKind.valueOf(repeatKind), repeatValue)
     val start: LocalDate get() = LocalDate.ofEpochDay(startEpochDay)
+
+    /** As [Recurring.problem]. */
+    fun problem(): String? = when {
+        SavingsType.entries.none { it.name == type } -> "a savings plan is of the kind \"$type\", which this app doesn't know"
+        repeatProblem(repeatKind, repeatValue) != null -> "a savings plan ${repeatProblem(repeatKind, repeatValue)}"
+        startEpochDay !in CALENDAR -> "a savings plan starts on no date the calendar has"
+        else -> null
+    }
 }
 
 @Serializable
@@ -269,7 +300,11 @@ data class Reminder(
     val title: String = "Time to record your accounts",
     val body: String = "Record one now",
     val enabled: Boolean = true,
-)
+) {
+    /** As [Recurring.problem]: its next time is worked out for every reminder after a restore and each boot. */
+    fun problem(): String? =
+        if (minuteOfDay !in 0 until MINUTES_IN_DAY) "a reminder is set for minute $minuteOfDay of the day" else null
+}
 
 /** A billing currency. [rate] is one unit expressed in the base currency. */
 @Serializable

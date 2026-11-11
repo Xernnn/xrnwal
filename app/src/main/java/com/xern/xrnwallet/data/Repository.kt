@@ -48,6 +48,33 @@ data class Backup(
     val photos: Map<String, String> = emptyMap(),
 )
 
+/** A backup or server copy this app can read but couldn't use. The message says why, for the owner. */
+class UnusableBackup(message: String) : Exception(message)
+
+object BackupReader {
+    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+
+    /**
+     * Parses a backup file or server copy, or throws: [UnusableBackup] when it holds something this app
+     * would take and then fail on. Settings, recurring items and rates are read again each time the app
+     * opens, so a single value out of range closed it on every launch. Nothing is changed here, so a copy
+     * refused leaves the phone as it was.
+     */
+    fun read(text: String): Backup {
+        val backup = json.decodeFromString<Backup>(text)
+        // This app would drop what it can't read, then send that back to the server without it.
+        if (backup.version > BACKUP_VERSION) throw UnusableBackup("it was made by a newer version of the app")
+        val problem = json.decodeFromString<Settings>(backup.settings).problem()
+            ?: backup.recurring.firstNotNullOfOrNull { it.problem() }
+            ?: backup.plans.firstNotNullOfOrNull { it.problem() }
+            ?: backup.reminders.firstNotNullOfOrNull { it.problem() }
+            // A rate is divided by. Zero gives infinity, which the Currencies page can't show and sync can't send.
+            ?: backup.rates.firstOrNull { !(it.rate.isFinite() && it.rate > 0) }?.let { "${it.code} has a rate of ${it.rate}" }
+        if (problem != null) throw UnusableBackup(problem)
+        return backup
+    }
+}
+
 object PhotoFiles {
     /** As the server's own grace: a photo just picked for a bill not saved yet, or just come down, stays. */
     private const val GRACE_MILLIS = 24 * 60 * 60 * 1000L
@@ -420,14 +447,13 @@ class Repository(
 
     /**
      * Replaces everything with a backup and returns the hash of the new [syncDocument]. The file is
-     * fully parsed before anything is deleted. With [expected], only while the document here still
-     * hashes to it, else null with nothing replaced. The check, the change and the new hash are one
-     * transaction, so a bill saved meanwhile waits for it and lands after, still to be sent.
+     * fully parsed and checked by [BackupReader] before anything is deleted. With [expected], only
+     * while the document here still hashes to it, else null with nothing replaced. The check, the
+     * change and the new hash are one transaction, so a bill saved meanwhile waits for it and lands
+     * after, still to be sent.
      */
     private suspend fun replace(text: String, keepLock: Boolean, expected: String?): String? = withContext(Dispatchers.IO) {
-        val backup = json.decodeFromString<Backup>(text)
-        // This app would drop what it can't read, then send that back to the server without it.
-        check(backup.version <= BACKUP_VERSION) { "Made by a newer version of the app" }
+        val backup = BackupReader.read(text)
         val decoder = Base64.getDecoder()
         val photos = backup.photos.mapValues { decoder.decode(it.value) }
         val folder = File(context.filesDir, "photos").apply { mkdirs() }

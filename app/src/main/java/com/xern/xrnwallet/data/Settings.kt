@@ -68,6 +68,20 @@ data class Settings(
 
     val locked: Boolean get() = pinHash != null || patternHash != null || biometric
 
+    /**
+     * What here this app can't work with, or null. Each is looked up as the app opens, so one out of
+     * range, from a backup file or server copy edited by hand, closed it on every launch.
+     */
+    fun problem(): String? = when {
+        separators !in SeparatorStyle.entries.indices -> "its Thousands Separator is $separators, which this app doesn't have"
+        decimals !in DecimalMode.entries.indices -> "its Decimal places is $decimals, which this app doesn't have"
+        weekendRule !in WeekendRule.entries.indices -> "its On weekends is $weekendRule, which this app doesn't have"
+        belonging !in Belonging.entries.indices -> "its Belonging month is $belonging, which this app doesn't have"
+        firstDayOfWeek !in 1..7 -> "its first day of the week is $firstDayOfWeek, not 1 to 7"
+        startDay !in 1..31 -> "its Start of Month is day $startDay"
+        else -> null
+    }
+
     /** The app lock belongs to this phone. It is never sent to the home server. */
     fun withoutLock(): Settings = withLockOf(Settings())
 
