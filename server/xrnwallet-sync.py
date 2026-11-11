@@ -406,13 +406,15 @@ class Handler(BaseHTTPRequestHandler):
         addr = client_address(self)
         header = self.headers.get("Authorization")
         if not admit(addr, counted=bool(header)):
-            time.sleep(FAIL_DELAY_S)
+            if header:
+                time.sleep(FAIL_DELAY_S)
             self.send(429, "too many wrong passwords; try again later",
                       headers={"Retry-After": str(FAIL_WINDOW_S)})
             return None
         user = check_login(header)
         if not user:
-            time.sleep(FAIL_DELAY_S)
+            if header:  # a request with none guessed nothing, and needn't hold a thread for it
+                time.sleep(FAIL_DELAY_S)
             self.send(401, "login required", headers={"WWW-Authenticate": 'Basic realm="xrnwallet"'})
             return None
         with fail_lock:

@@ -306,6 +306,26 @@ class SyncServerTest(unittest.TestCase):
         self.assertEqual(401, self.guess("::ffff:203.0.113.40"))  # an IPv4 caller written as IPv6
         self.assertIn("203.0.113.40", srv.failures)  # ...is counted as that IPv4 address
 
+    def test_a_request_with_no_password_isnt_held(self):
+        # The hold after a wrong password slows a guesser down. One that sent no password guessed
+        # nothing, and each held a thread for the hold all the same.
+        def timed(addr, password):
+            start = time.monotonic()
+            status = self.call("GET", "/state", password=password, headers={"X-Forwarded-For": addr})[0]
+            return status, time.monotonic() - start
+        srv.failures["203.0.113.61"] = [time.monotonic()] * srv.FAIL_LIMIT  # locked out
+        srv.FAIL_DELAY_S = 0.5
+        try:
+            for addr, status in (("203.0.113.60", 401), ("203.0.113.61", 429)):
+                got, took = timed(addr, None)
+                self.assertEqual(got, status)
+                self.assertLess(took, 0.4, addr)
+                got, took = timed(addr, "nope")
+                self.assertEqual(got, status)
+                self.assertGreaterEqual(took, 0.5, addr)
+        finally:
+            srv.FAIL_DELAY_S = 0
+
     def test_too_many_wrong_passwords_lock_the_address_out(self):
         for _ in range(srv.FAIL_LIMIT):
             self.assertEqual(self.call("GET", "/state", password="wrong")[0], 401)
