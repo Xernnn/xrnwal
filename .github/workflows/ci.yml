@@ -22,9 +22,8 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v6
 
-      # No lintDebug yet: it fails on main (5 errors in the widget layouts and Csv.kt).
-      - name: Unit tests, debug build
-        run: ./gradlew :app:testDebugUnitTest :app:assembleDebug --console=plain
+      - name: Unit tests, debug build, lint
+        run: ./gradlew :app:testDebugUnitTest :app:assembleDebug :app:lintDebug --console=plain
 
       # The server steps run even when the app checks fail, since they don't depend on them.
       # Not the runner's own Python: Ubuntu's 3.12.3 answers a garbage request line with no
