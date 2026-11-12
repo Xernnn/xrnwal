@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  # One job on purpose: this repo is private, so every runner minute counts.
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      # No lintDebug yet: it fails on main (5 errors in the widget layouts and Csv.kt).
+      - name: Unit tests, debug build
+        run: ./gradlew :app:testDebugUnitTest :app:assembleDebug --console=plain
+
+      # A virtualenv: the runner's Python refuses system-wide pip installs (PEP 668).
+      # Runs even when the app checks fail, since it doesn't depend on them.
+      - name: Sync server tests
+        if: ${{ !cancelled() }}
+        run: |
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install --quiet bcrypt
+          "$RUNNER_TEMP/venv/bin/python" -m unittest server/test_xrnwallet_sync.py
