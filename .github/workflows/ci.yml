@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  # One job on purpose: this repo is private, so every runner minute counts.
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Unit tests, debug build, lint
+        run: ./gradlew :app:testDebugUnitTest :app:assembleDebug :app:lintDebug --console=plain
+
+      # The server steps run even when the app checks fail, since they don't depend on them.
+      # Not the runner's own Python: Ubuntu's 3.12.3 answers a garbage request line with no
+      # status line (fixed in later CPython), which test_an_unparseable_request_gets_an_answer catches.
+      - uses: actions/setup-python@v7
+        if: ${{ !cancelled() }}
+        with:
+          python-version: "3.14"
+
+      - name: Sync server tests
+        if: ${{ !cancelled() }}
+        run: |
+          pip install --quiet bcrypt
+          python -m unittest server/test_xrnwallet_sync.py

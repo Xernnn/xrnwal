@@ -68,7 +68,7 @@ other and keeps the app's data. That key isn't in the repo and must never be add
 ## Sync server
 
 `server/xrnwallet-sync.py` keeps a copy of the wallet on a home server. It is one Python file, needing
-only `bcrypt` beyond the standard library.
+only `bcrypt` beyond the standard library. Use Python 3.14.7 or newer: older versions answer a malformed request with no HTTP status line, which the server tests check for.
 
 ```sh
 python3 -m unittest server/test_xrnwallet_sync.py   # server tests

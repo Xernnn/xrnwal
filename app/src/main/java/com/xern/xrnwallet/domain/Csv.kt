@@ -3,7 +3,7 @@ package com.xern.xrnwallet.domain
 /** RFC 4180 reading and writing. */
 object Csv {
     fun parse(input: String): List<List<String>> {
-        val text = input.removePrefix("﻿")
+        val text = input.removePrefix("\uFEFF")
         val rows = mutableListOf<List<String>>()
         var row = mutableListOf<String>()
         val cell = StringBuilder()
@@ -42,7 +42,7 @@ object Csv {
     }
 
     fun write(rows: List<List<String>>): String = buildString {
-        append('﻿')
+        append('\uFEFF')
         rows.forEach { row ->
             append(row.joinToString(",", transform = ::escape))
             append("\r\n")
