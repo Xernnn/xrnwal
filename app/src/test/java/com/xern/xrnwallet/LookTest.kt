@@ -3,6 +3,7 @@ package com.xern.xrnwallet
 import com.xern.xrnwallet.domain.Dates
 import com.xern.xrnwallet.ui.Art
 import com.xern.xrnwallet.ui.budgetFace
+import com.xern.xrnwallet.ui.fittingSize
 import com.xern.xrnwallet.ui.hourOf
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -66,6 +67,14 @@ class LookTest {
         // Over budget the share left reads 0 too, but the money says it's gone past.
         assertEquals("😱", budgetFace(-5_00, 0))
         listOf("😄", "🙂", "😐", "😟", "😱").forEach { assertNotNull(it, Art.drawable(it)) }
+    }
+
+    @Test
+    fun aLongAmountTakesTheLargestSizeThatFits() {
+        assertEquals(25, fittingSize(25, 12) { true })
+        assertEquals(18, fittingSize(25, 12) { it <= 18 })
+        // Past the smallest size it stays there and grows wider instead.
+        assertEquals(12, fittingSize(25, 12) { false })
     }
 
     @Test

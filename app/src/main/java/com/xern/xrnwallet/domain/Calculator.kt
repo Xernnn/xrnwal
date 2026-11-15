@@ -101,6 +101,33 @@ object Calculator {
      */
     fun cents(text: String): Long? = evaluate(text)?.let(Money::centsOrNull)
 
+    /**
+     * The keypad text as shown: every number's whole part grouped in threes and the decimal mark swapped,
+     * so "1234.5+6789" reads "1.234,5+6.789" with dots for thousands, as the reference shows a sum.
+     * The text itself keeps '.' and no grouping, so nothing typed changes.
+     */
+    fun display(text: String, group: Char, decimal: Char): String {
+        val shown = StringBuilder()
+        val number = StringBuilder()
+        fun flush() {
+            val typed = number.toString()
+            val whole = typed.substringBefore('.')
+            shown.append(whole.reversed().chunked(3).joinToString(group.toString()).reversed())
+            if ('.' in typed) shown.append(decimal).append(typed.substringAfter('.'))
+            number.clear()
+        }
+        for (c in text) {
+            if (isOperator(c)) {
+                flush()
+                shown.append(c)
+            } else {
+                number.append(c)
+            }
+        }
+        flush()
+        return shown.toString()
+    }
+
     /** Text form of a value, for loading an existing amount or replacing a sum with its result. */
     fun format(value: BigDecimal): String =
         value.stripTrailingZeros().let { if (it.scale() < 0) it.setScale(0) else it }.toPlainString()

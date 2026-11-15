@@ -163,6 +163,26 @@ class DomainTest {
     }
 
     @Test
+    fun theKeypadAmountShowsGroupedInThreesAsTheReferenceDoes() {
+        // As the reference showed them on the phone, typed with dots for thousands and a decimal comma.
+        assertEquals("0", Calculator.display("0", '.', ','))
+        assertEquals("123", Calculator.display("123", '.', ','))
+        assertEquals("1.234", Calculator.display("1234", '.', ','))
+        assertEquals("12.345", Calculator.display("12345", '.', ','))
+        assertEquals("123.456.789.012", Calculator.display("123456789012", '.', ','))
+        assertEquals("1.234,5+6.789", Calculator.display("1234.5+6789", '.', ','))
+        // Every number of a sum is grouped, and an operator just pressed or a mark just typed stays.
+        assertEquals("999×1.000", Calculator.display("999×1000", '.', ','))
+        assertEquals("1.234+", Calculator.display("1234+", '.', ','))
+        assertEquals("1.234,", Calculator.display("1234.", '.', ','))
+        assertEquals("0,05", Calculator.display("0.05", '.', ','))
+        // A sum that came out negative keeps its sign in front.
+        assertEquals("-5.000", Calculator.display("-5000", '.', ','))
+        // The other way round, for the other number format.
+        assertEquals("1,234.5", Calculator.display("1234.5", ',', '.'))
+    }
+
+    @Test
     fun aKeypadSumTooLargeForAnAmountIsNoAmountNotACrash() {
         // Twelve digits are the most the keypad takes for each number.
         assertEquals("999999999998000000000001.00", Calculator.evaluate("999999999999×999999999999").toString())
