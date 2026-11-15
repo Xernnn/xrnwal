@@ -40,22 +40,29 @@ twice.
 
 ## Add / edit bill
 
-- Close, ledger picker. Tabs: Expenses, Income, Transfer.
+- Close, ledger picker. Editing a bill, also Add again today and Delete (each with Undo on the
+  page underneath). Tabs: Expenses, Income, Transfer.
 - Category grid of in-use categories; choosing a parent with subcategories offers them. Income has
   an Edit tile that opens the category editor.
 - Account chip (picker with balances, + to create, "Do not bind personal accounts" option).
 - Tag button (multi-select, + to create).
-- Photo attachment, note, amount with currency switch (billing currencies only).
+- Budget chip: counted in the budget or left out (struck through). Our addition: the reference has
+  this switch only on its bill detail page, which a tap no longer opens.
+- Photo attachment (tap the thumbnail to see it large, or remove it), note, amount with currency
+  switch (billing currencies only). The amount rolls up as digits are typed and down as they go.
 - Keypad: digits, decimal, backspace, + - x /, date button ("Today"), save. While a sum is pending
   the save key shows =, which evaluates.
-- Date and time picker. Future dates are selectable only through recurring items.
+- Date and time picker: the month, with the time on hour and minute wheels below it in the same
+  card (as the reference), 24-hour or with AM/PM as the phone is set. Each step ticks. Future dates
+  are selectable only through recurring items.
 - Transfer: payment account, receive account, swap button, Fee (requires an account first, tip:
   "Please select an account").
 
 ## Bill detail
 
-Category, amount, Notes, Ledger (change), Accounts (change), Included in budget switch, Date;
-duplicate, delete, edit.
+The reference opens this on a tap: Category, amount, Notes, Ledger (change), Accounts (change),
+Included in budget switch, Date; duplicate, delete, edit. Here a tap opens the edit page instead,
+which holds all of it, so changing a bill takes one tap rather than two.
 
 Transfers appear in account history as "From >> To" and count in neither expenses nor income.
 

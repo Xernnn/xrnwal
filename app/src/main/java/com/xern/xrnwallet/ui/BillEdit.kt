@@ -1,5 +1,17 @@
 package com.xern.xrnwallet.ui
 
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Animatable
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -37,6 +49,8 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.filled.DonutLarge
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.SwapVert
@@ -173,6 +187,9 @@ fun BillEditScreen(id: Long, date: Long, initialType: Int) {
         )
     }
     var tagIds by remember { mutableStateOf(if (existing != null) s.tagIdsOf(existing.id) else emptyList()) }
+    var inBudget by remember { mutableStateOf(existing?.inBudget ?: true) }
+    val undo = LocalBillUndo.current
+    val budgetTick = rememberTick()
 
     val tabs = rememberPagerState(initialPage = tab) { BillType.TRANSFER + 1 }
     LaunchedEffect(tabs) { snapshotFlow { tabs.currentPage }.collect { tab = it } }
@@ -228,7 +245,7 @@ fun BillEditScreen(id: Long, date: Long, initialType: Int) {
             note = note.trim(),
             photo = photo,
             atMillis = BillCsv.millisOf(at),
-            inBudget = existing?.inBudget ?: true,
+            inBudget = inBudget,
             recurringId = existing?.recurringId,
         ).let { it.copy(toAmountCents = s.fixedAmount(it, before = existing)) }
         saving = true
@@ -248,6 +265,18 @@ fun BillEditScreen(id: Long, date: Long, initialType: Int) {
         Row(Modifier.fillMaxWidth().height(60.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton({ nav.leavePage() }) { Icon(Icons.Filled.Close, "Close") }
             Spacer(Modifier.weight(1f))
+            // A bill opens straight into this page, so what its details page offered is here: the
+            // stored bill again for today, or gone, each with Undo on the page underneath.
+            if (existing != null) {
+                IconButton({
+                    undo.copyToToday(existing, s.tagIdsOf(existing.id))
+                    nav.leavePage()
+                }) { Icon(Icons.Filled.ContentCopy, "Add again today") }
+                IconButton({
+                    undo.delete(existing, s.tagIdsOf(existing.id))
+                    nav.leavePage()
+                }) { Icon(Icons.Filled.Delete, "Delete", tint = Color(0xFFFF3B30)) }
+            }
             Text(
                 s.ledgerById[ledgerId]?.name ?: "No ledger",
                 Modifier.clickable { dialog = "ledger" }.padding(12.dp),
@@ -289,12 +318,14 @@ fun BillEditScreen(id: Long, date: Long, initialType: Int) {
                 Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                val chips = remember { List(3) { MutableInteractionSource() } }
                 Box(
                     Modifier
                         .widthIn(max = 200.dp)
+                        .springPress(chips[0])
                         .clip(RoundedCornerShape(12.dp))
                         .background(MaterialTheme.colorScheme.primary)
-                        .clickable { dialog = "account" }
+                        .clickable(chips[0], ripple()) { dialog = "account" }
                         .padding(horizontal = 14.dp, vertical = 6.dp),
                 ) {
                     Text(
@@ -307,9 +338,10 @@ fun BillEditScreen(id: Long, date: Long, initialType: Int) {
                 Box(
                     Modifier
                         .padding(start = 8.dp)
+                        .springPress(chips[1])
                         .clip(RoundedCornerShape(12.dp))
                         .background(if (tagIds.isEmpty()) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.primary)
-                        .clickable { dialog = "tags" }
+                        .clickable(chips[1], ripple()) { dialog = "tags" }
                         .padding(horizontal = 10.dp, vertical = 6.dp),
                 ) {
                     Icon(
@@ -317,6 +349,25 @@ fun BillEditScreen(id: Long, date: Long, initialType: Int) {
                         "Tags",
                         Modifier.size(20.dp),
                         tint = if (tagIds.isEmpty()) MaterialTheme.colorScheme.onSurface else Color.Black,
+                    )
+                }
+                Row(
+                    Modifier
+                        .padding(start = 8.dp)
+                        .springPress(chips[2])
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .clickable(chips[2], ripple()) { budgetTick(); inBudget = !inBudget }
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                        .semantics { contentDescription = if (inBudget) "Counted in the budget" else "Left out of the budget" },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Filled.DonutLarge, null, Modifier.size(18.dp))
+                    Text(
+                        "Budget",
+                        Modifier.padding(start = 6.dp),
+                        color = if (inBudget) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                        textDecoration = if (inBudget) null else TextDecoration.LineThrough,
                     )
                 }
             }
@@ -351,8 +402,8 @@ fun BillEditScreen(id: Long, date: Long, initialType: Int) {
                     if (preview != null) {
                         Image(
                             preview,
-                            "Attached photo. Tap to remove.",
-                            Modifier.size(34.dp).clip(RoundedCornerShape(6.dp)).clickable { photo = null },
+                            "Attached photo",
+                            Modifier.size(34.dp).clip(RoundedCornerShape(6.dp)).clickable { dialog = "photo" },
                             contentScale = ContentScale.Crop,
                         )
                     } else {
@@ -377,12 +428,24 @@ fun BillEditScreen(id: Long, date: Long, initialType: Int) {
                         },
                     )
                     Column(horizontalAlignment = Alignment.End) {
-                        Text(
-                            amount.replace('.', settings.moneyFormat.decimalChar),
-                            fontSize = if (amount.length > 12) 18.sp else 26.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                        )
+                        AnimatedContent(
+                            amount,
+                            transitionSpec = {
+                                val up = targetState.length >= initialState.length
+                                (slideInVertically(tween(140)) { if (up) it / 2 else -it / 2 } + fadeIn(tween(140)))
+                                    .togetherWith(slideOutVertically(tween(110)) { if (up) -it / 2 else it / 2 } + fadeOut(tween(110)))
+                                    .using(SizeTransform(clip = false))
+                            },
+                            contentAlignment = Alignment.CenterEnd,
+                            label = "amount",
+                        ) { shown ->
+                            Text(
+                                shown.replace('.', settings.moneyFormat.decimalChar),
+                                fontSize = if (shown.length > 12) 18.sp else 26.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                            )
+                        }
                         Text(
                             currency,
                             Modifier.clickable { dialog = "currency" },
@@ -406,6 +469,10 @@ fun BillEditScreen(id: Long, date: Long, initialType: Int) {
     }
 
     when (dialog) {
+        "photo" -> PhotoDialog(photo, onDismiss = { dialog = null }) {
+            photo = null
+            dialog = null
+        }
         "ledger" -> LedgerDialog(s.ledgers, ledgerId, allowAll = false, onDismiss = { dialog = null }) {
             ledgerId = it
             dialog = null
@@ -468,24 +535,47 @@ private fun CategoryGrid(
     onEdit: () -> Unit,
     onPick: (Category) -> Unit,
 ) {
+    val tick = rememberHaptic(android.view.HapticFeedbackConstants.CLOCK_TICK)
     LazyVerticalGrid(
         columns = GridCells.Fixed(4),
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
     ) {
         items(categories, key = { it.id }) { category ->
+            val source = remember { MutableInteractionSource() }
+            val chosen = category.id == selected
+            val bounce = remember { Animatable(1f) }
+            var wasChosen by remember { mutableStateOf(chosen) }
+            LaunchedEffect(chosen) {
+                // Only a change bounces: a page opening on its category stays still.
+                if (chosen && !wasChosen) {
+                    bounce.animateTo(1.14f, spring(stiffness = Spring.StiffnessHigh))
+                    bounce.animateTo(1f, spring(dampingRatio = 0.35f, stiffness = Spring.StiffnessMedium))
+                }
+                wasChosen = chosen
+            }
+            val ring by animateColorAsState(
+                if (chosen) MaterialTheme.colorScheme.primary else Color.Transparent,
+                tween(160),
+                label = "ring",
+            )
             Column(
-                Modifier.clip(RoundedCornerShape(12.dp)).clickable { onPick(category) }.padding(vertical = 6.dp),
+                Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable(source, null) { tick(); onPick(category) }
+                    .padding(vertical = 6.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Box(
                     Modifier
+                        .springPress(source, depth = 0.88f)
+                        .graphicsLayer { scaleX = bounce.value; scaleY = bounce.value }
                         .size(60.dp)
                         .clip(CircleShape)
-                        .background(softTint(category.icon))
-                        .then(if (category.id == selected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, CircleShape) else Modifier),
+                        .background(bubbleColour(category.icon))
+                        .border(2.dp, ring, CircleShape),
                     contentAlignment = Alignment.Center,
-                ) { Glyph(category.icon, 30.dp) }
+                ) { Glyph(category.icon, 36.dp) }
                 Text(
                     category.name,
                     Modifier.padding(top = 4.dp),
@@ -746,91 +836,20 @@ fun CurrencyDialog(onDismiss: () -> Unit, selected: String? = null, onPick: (Str
     OptionDialog("Currency", options, selected, { "${Currencies.info(it).flag}  $it  ${Currencies.info(it).name}" }, onDismiss, onPick)
 }
 
+/** The attached photo, as large as the screen allows, with a way to take it off the bill. */
 @Composable
-fun BillDetailScreen(id: Long) {
-    val s = snap()
-    val f = fmt()
-    val nav = LocalNav.current
-    val repo = LocalRepo.current
-    val bill = s.bills.firstOrNull { it.id == id }
-    val undo = LocalBillUndo.current
-    var dialog by remember { mutableStateOf<String?>(null) }
-
-    Page("Bill Details") {
-        if (bill == null) {
-            EmptyNote("This bill no longer exists")
-            return@Page
+private fun PhotoDialog(path: String?, onDismiss: () -> Unit, onRemove: () -> Unit) {
+    val photo = remember(path) { path?.let { BitmapFactory.decodeFile(it)?.asImageBitmap() } }
+    DialogCard(onDismiss) {
+        if (photo != null) {
+            Image(photo, "Attached photo", Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)), contentScale = ContentScale.FillWidth)
+        } else {
+            Muted("The photo can't be read.")
         }
-        ScrollBody {
-            Panel {
-                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Bubble(if (bill.type == BillType.TRANSFER) "🪙" else s.categoryById[bill.categoryId]?.icon ?: "⭐")
-                    Text(
-                        when (bill.type) {
-                            BillType.TRANSFER -> "Transfer"
-                            else -> s.categoryLabel(bill.categoryId)
-                        },
-                        Modifier.padding(start = 14.dp).weight(1f),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    Text(
-                        when (bill.type) {
-                            BillType.EXPENSE -> f.signed(-bill.amountCents, bill.currency)
-                            BillType.INCOME -> f.signed(bill.amountCents, bill.currency)
-                            else -> f.money(bill.amountCents, bill.currency)
-                        },
-                        color = when (bill.type) {
-                            BillType.EXPENSE -> f.expenseColor
-                            BillType.INCOME -> f.incomeColor
-                            else -> MaterialTheme.colorScheme.onSurface
-                        },
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                }
-                Divider()
-                if (bill.currency != f.base) ListRow("Base amount", f.money(bill.baseCents))
-                ListRow("Notes", bill.note.ifEmpty { " " })
-                ListRow("Ledger", s.ledgerById[bill.ledgerId]?.name ?: "None") { dialog = "ledger" }
-                if (bill.type == BillType.TRANSFER) {
-                    ListRow("Payment account", s.accountById[bill.accountId]?.name?.trim() ?: "None") { dialog = "account" }
-                    ListRow("Receive account", s.accountById[bill.toAccountId]?.name?.trim() ?: "None")
-                    if (bill.feeCents != 0L) ListRow("Fee", f.money(bill.feeCents, bill.currency))
-                } else {
-                    ListRow("Accounts", s.accountById[bill.accountId]?.name?.trim() ?: "None") { dialog = "account" }
-                    SwitchRow("Included in budget", bill.inBudget) { repo.updateBill(bill.copy(inBudget = it)) }
-                }
-                val tags = s.tagsOf(bill.id)
-                if (tags.isNotEmpty()) ListRow("Tags", tags.joinToString(", ") { it.name })
-                ListRow("Date", Dates.full(bill.dateTime))
-            }
-            val photo = remember(bill.photo) { bill.photo?.let { BitmapFactory.decodeFile(it)?.asImageBitmap() } }
-            if (photo != null) {
-                Image(photo, "Attached photo", Modifier.fillMaxWidth().clip(CardShape), contentScale = ContentScale.FillWidth)
-            }
-            Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton({ undo.copyToToday(bill, s.tagIdsOf(bill.id)) }) {
-                    Icon(Icons.Filled.ContentCopy, "Duplicate")
-                }
-                Spacer(Modifier.weight(1f))
-                IconButton({
-                    undo.delete(bill, s.tagIdsOf(bill.id))
-                    nav.leavePage()
-                }) { Icon(Icons.Filled.Delete, "Delete", tint = Color(0xFFFF3B30)) }
-                IconButton({ nav.navigate("edit?id=${bill.id}") }) { Icon(Icons.Filled.Edit, "Edit") }
-            }
-        }
-    }
-    if (bill != null) {
-        when (dialog) {
-            "ledger" -> LedgerDialog(s.ledgers, bill.ledgerId, allowAll = false, onDismiss = { dialog = null }) {
-                repo.updateBill(bill.copy(ledgerId = it))
-                dialog = null
-            }
-            "account" -> AccountDialog(s.accounts.filter { !it.archived }, allowNone = bill.type != BillType.TRANSFER, onDismiss = { dialog = null }) {
-                val moved = bill.copy(accountId = it)
-                repo.updateBill(moved.copy(toAmountCents = s.fixedAmount(moved, before = bill)))
-                dialog = null
-            }
+        Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onRemove) { Text("Remove photo", color = Color(0xFFFF3B30)) }
+            Spacer(Modifier.weight(1f))
+            TextButton(onDismiss) { Text("Close") }
         }
     }
 }

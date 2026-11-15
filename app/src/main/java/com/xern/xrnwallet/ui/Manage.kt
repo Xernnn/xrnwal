@@ -319,7 +319,7 @@ fun CategoriesScreen() {
 @Composable
 fun IconPicker(selected: String, onPick: (String) -> Unit) {
     var tab by remember { mutableIntStateOf(Art.tabOf(selected)) }
-    UnderlineTabs((1..Art.STYLES).map { "Style$it" } + "emoji", tab, onSelect = { tab = it })
+    UnderlineTabs(Art.tabNames, tab, onSelect = { tab = it })
     val options = if (tab == Art.STYLES) Art.emojiChoices else Art.choices(tab + 1)
     options.chunked(4).forEach { row ->
         Row(Modifier.fillMaxWidth().padding(top = 8.dp)) {

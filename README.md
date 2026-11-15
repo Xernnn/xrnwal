@@ -15,8 +15,8 @@ Kotlin and Jetpack Compose, with Room for storage. Minimum Android 8.0.
 ## What it does
 
 - **Bills:** expenses, income and transfers between accounts, with fees, tags, notes, photos and
-  future dates. The keypad adds up sums as you type. Hold a bill to edit it, add it again today or
-  delete it, and Undo brings a deleted bill back for a few seconds.
+  future dates. The keypad adds up sums as you type. Tap a bill to change it, or hold it to edit it,
+  add it again today or delete it; Undo brings a deleted bill back for a few seconds.
 - **Home and Calendar:** expenses, income and balance for one ledger or all of them, by week, month,
   year or a range of your own, with search, a budget card and checklists. Calendar shows each day's
   totals.
@@ -79,7 +79,10 @@ In the app: Mine, Data synchronization, then the server's address ending in `/xr
 
 ## Credits
 
-Uses [MiSans](https://hyperos.mi.com/font) by Xiaomi.
+Uses [MiSans](https://hyperos.mi.com/font) by Xiaomi. The colour icons are drawn from Microsoft's
+[Fluent Emoji](https://github.com/microsoft/fluentui-emoji) (MIT licence, see
+[docs/licenses/fluentui-emoji.txt](docs/licenses/fluentui-emoji.txt)); `tools/fluent_icons.py` makes
+them, and makes the ones a new emoji in the code needs.
 
 ## Docs
 

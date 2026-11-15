@@ -1,5 +1,14 @@
 package com.xern.xrnwallet.ui
 
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Animatable
 import android.os.SystemClock
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -53,7 +62,8 @@ import kotlinx.coroutines.flow.first
 import java.time.LocalDate
 
 fun NavHostController.addBill(date: LocalDate? = null) = navigate("edit?date=${date?.toEpochDay() ?: NO_DATE}")
-fun NavHostController.openBill(id: Long) = navigate("bill/$id")
+/** A bill opens straight into its edit page, as one tap is all it should take to change it. */
+fun NavHostController.openBill(id: Long) = navigate("edit?id=$id")
 
 const val NO_DATE = Long.MIN_VALUE
 
@@ -164,7 +174,6 @@ private fun NavGraphBuilder.routes() {
         val args = it.arguments!!
         BillEditScreen(args.getLong("id"), args.getLong("date"), args.getInt("type"))
     }
-    idRoute("bill") { BillDetailScreen(it) }
     composable(
         "filter?category={category}&start={start}&end={end}&type={type}",
         listOf(
@@ -253,7 +262,8 @@ private fun BottomBar(tab: Int, onSelect: (Int) -> Unit, onAdd: () -> Unit) {
             }
         }
         val source = remember { MutableInteractionSource() }
-        val scale = pressedScale(source)
+        val scale = pressedScale(source, depth = 0.86f)
+        val tick = rememberTick()
         Box(
             Modifier
                 .align(Alignment.TopCenter)
@@ -265,7 +275,7 @@ private fun BottomBar(tab: Int, onSelect: (Int) -> Unit, onAdd: () -> Unit) {
                 .size(56.dp)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.primary)
-                .clickable(source, ripple(), onClick = onAdd)
+                .clickable(source, ripple()) { tick(); onAdd() }
                 .semantics { contentDescription = "Add bill" },
             contentAlignment = Alignment.Center,
         ) { Icon(Icons.Filled.Add, null, tint = Color.Black, modifier = Modifier.size(28.dp)) }
@@ -274,18 +284,37 @@ private fun BottomBar(tab: Int, onSelect: (Int) -> Unit, onAdd: () -> Unit) {
 
 @Composable
 private fun BarItem(label: String, icon: ImageVector, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    val tick = rememberTick()
+    val hop = remember { Animatable(1f) }
+    var wasSelected by remember { mutableStateOf(selected) }
+    LaunchedEffect(selected) {
+        if (selected && !wasSelected) {
+            hop.animateTo(1.18f, spring(stiffness = Spring.StiffnessHigh))
+            hop.animateTo(1f, spring(dampingRatio = 0.4f, stiffness = Spring.StiffnessMedium))
+        }
+        wasSelected = selected
+    }
+    val pill by animateColorAsState(
+        if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.3f) else Color.Transparent,
+        tween(180),
+        label = "pill",
+    )
     Column(
         modifier
             .fillMaxHeight()
-            .clickable(remember { MutableInteractionSource() }, null, onClick = onClick),
+            .clickable(remember { MutableInteractionSource() }, null) {
+                if (!selected) tick()
+                onClick()
+            },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
         // Yellow on white is hard to see, so the choice is a soft pill and the icon stays dark.
         Box(
             Modifier
+                .graphicsLayer { scaleX = hop.value; scaleY = hop.value }
                 .clip(CircleShape)
-                .background(if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.3f) else Color.Transparent)
+                .background(pill)
                 .padding(horizontal = 14.dp, vertical = 2.dp),
         ) {
             Icon(
