@@ -136,7 +136,7 @@ fun BudgetScreen() {
                             Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     Ring(line.remainingPercent / 100f, size = 64.dp, stroke = 6.dp) {
-                                        Text(category?.icon ?: "⭐", fontSize = 24.sp)
+                                        Glyph(category?.icon ?: "⭐", 30.dp)
                                     }
                                     Text("${line.remainingPercent}%", Modifier.padding(top = 4.dp))
                                 }

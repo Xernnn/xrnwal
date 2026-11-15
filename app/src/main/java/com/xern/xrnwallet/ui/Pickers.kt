@@ -1,5 +1,6 @@
 package com.xern.xrnwallet.ui
 
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -507,7 +508,7 @@ private val FULL_DATE = DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.ENGLIS
 fun PeriodSwitcher(label: String, onPrevious: () -> Unit, onNext: () -> Unit, onPick: () -> Unit, modifier: Modifier = Modifier) {
     Row(modifier, horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
         IconButton(onPrevious, Modifier.size(40.dp)) {
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Previous period", Modifier.size(30.dp))
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Previous period", Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         // A steady width keeps the arrows still under a finger pressing them again and again.
         Crossfade(
@@ -520,9 +521,11 @@ fun PeriodSwitcher(label: String, onPrevious: () -> Unit, onNext: () -> Unit, on
             animationSpec = tween(140),
             label = "period",
         ) { shown ->
+            // The ▾ says the name opens a picker, as the reference's month does.
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
             Text(
                 shown,
-                Modifier.fillMaxWidth(),
+                Modifier.weight(1f, fill = false),
                 style = MaterialTheme.typography.titleLarge,
                 fontSize = when {
                     shown.length <= 9 -> 22.sp
@@ -534,9 +537,11 @@ fun PeriodSwitcher(label: String, onPrevious: () -> Unit, onNext: () -> Unit, on
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
+            Icon(Icons.Filled.ArrowDropDown, null, Modifier.size(22.dp))
+            }
         }
         IconButton(onNext, Modifier.size(40.dp)) {
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Next period", Modifier.size(30.dp))
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Next period", Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

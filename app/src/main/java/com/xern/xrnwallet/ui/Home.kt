@@ -1,5 +1,7 @@
 package com.xern.xrnwallet.ui
 
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -80,7 +82,16 @@ fun HomeScreen() {
                     .padding(6.dp)
                     .semantics { contentDescription = "Ledger: ${ledger?.name ?: "All ledgers"}" },
             ) {
-                Text(ledger?.let { Seed.ledgerCovers.getOrElse(it.cover) { Seed.ledgerCovers[0] }.first } ?: "📚", fontSize = 24.sp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Glyph(ledger?.let { Seed.ledgerCovers.getOrElse(it.cover) { Seed.ledgerCovers[0] }.first } ?: "📚", 28.dp)
+                    Text(
+                        ledger?.name ?: "All",
+                        Modifier.padding(start = 6.dp).widthIn(max = 64.dp),
+                        style = MaterialTheme.typography.bodyLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
             PeriodSwitcher(
                 period.label(rules, today),
@@ -243,7 +254,7 @@ private fun LedgerOption(icon: String, name: String, selected: Boolean, onClick:
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(icon, fontSize = 26.sp)
+        Glyph(icon, 30.dp)
         Text(name, Modifier.padding(start = 12.dp), style = MaterialTheme.typography.bodyLarge)
     }
 }
@@ -318,8 +329,9 @@ fun SummaryCard(style: Int, expense: Long, income: Long, balance: Long, status: 
                     }
                 }
             }
-            else -> Row(Modifier.fillMaxWidth().padding(vertical = 14.dp)) {
+            else -> Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                 labels.forEachIndexed { i, label ->
+                    if (i > 0) Box(Modifier.width(1.dp).height(30.dp).background(MaterialTheme.colorScheme.outline))
                     Stat(label, values[i], arrows[i].first, arrows[i].second, Modifier.weight(1f))
                 }
             }
@@ -331,7 +343,10 @@ fun SummaryCard(style: Int, expense: Long, income: Long, balance: Long, status: 
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Ring(status.remainingPercent / 100f, size = 92.dp) {
-                    Text("${status.remainingPercent}%", style = MaterialTheme.typography.bodyLarge)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Glyph(budgetFace(status.remainingCents, status.remainingPercent), 38.dp)
+                        Text("${status.remainingPercent}%", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
                 Column(Modifier.padding(start = 20.dp).weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     BudgetLine("Budget", f.plain(status.budgetCents))
@@ -364,12 +379,27 @@ fun BudgetLine(
     }
 }
 
+/**
+ * How the budget is going, as a face: plenty left, some, little, none, over. A ring with a face reads
+ * at a glance, where a percentage has to be read; the reference does the same with its mascot.
+ */
+fun budgetFace(remainingCents: Long, remainingPercent: Int): String = when {
+    remainingCents < 0 -> "😱"
+    remainingPercent >= 60 -> "😄"
+    remainingPercent >= 30 -> "🙂"
+    remainingPercent > 0 -> "😐"
+    else -> "😟"
+}
+
+/** Over budget is a warning, not an error, so it's amber; red stays for money going out. */
+val ExceededAmber = Color(0xFFF5A33A)
+
 /** "Remaining" with a negative number makes people do sums, so an overspend is named and shown as positive. */
 @Composable
 fun RemainingLine(cents: Long, accent: String? = null) {
     val f = fmt()
     if (cents < 0) {
-        BudgetLine("Exceeded", f.plain(-cents), valueColor = f.expenseColor)
+        BudgetLine("Exceeded", f.plain(-cents), valueColor = ExceededAmber)
     } else {
         BudgetLine("Remaining", f.plain(cents), accent)
     }
@@ -441,12 +471,13 @@ private fun CalendarPage(
                 }
             }
             Panel {
-                Column(Modifier.padding(8.dp)) {
-                    Row(Modifier.fillMaxWidth()) {
-                        weekdayLabels(firstDay).forEach {
-                            Text(it, Modifier.weight(1f), textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall)
-                        }
+                // The weekdays on a band of the accent, as the reference's calendar has them.
+                Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primary).padding(vertical = 10.dp)) {
+                    weekdayLabels(firstDay).forEach {
+                        Text(it, Modifier.weight(1f), textAlign = TextAlign.Center, color = Color.Black, style = MaterialTheme.typography.bodyMedium)
                     }
+                }
+                Column(Modifier.padding(8.dp)) {
                     monthCells(month, firstDay).forEach { week ->
                         Row(Modifier.fillMaxWidth()) {
                             week.forEach { date ->

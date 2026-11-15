@@ -6,7 +6,9 @@ and workflows are matched, assets are not.
 
 ## Navigation
 
-Bottom bar: Home, Reports, centre + button (Add bill), Accounts, Mine.
+Bottom bar: Home, Reports, centre + button (Add bill), Accounts, Mine. Line icons; the chosen one is
+filled with the accent under dark lines, with a bold label, and no pill behind it. The + sits in a
+notch cut into the bar's top edge.
 
 Touches are ignored while two pages are on screen, so a second tap can't save twice or open a page
 twice.
@@ -44,7 +46,8 @@ twice.
   page underneath). Tabs: Expenses, Income, Transfer.
 - Category grid of in-use categories; choosing a parent with subcategories offers them. Income has
   an Edit tile that opens the category editor.
-- Account chip (picker with balances, + to create, "Do not bind personal accounts" option).
+- Account chip. Its picker is a page of cards grouped Savings / Credit, each with "Balance" over the
+  amount and the current one outlined; + to create, "Do not bind personal accounts" at the foot.
 - Tag button (multi-select, + to create).
 - Budget chip: counted in the budget or left out (struck through). Our addition: the reference has
   this switch only on its bill detail page, which a tap no longer opens.
@@ -230,7 +233,8 @@ Every gesture also has a visible way to do the same thing.
 - Pages: Home, Reports, Calendar, date pickers and the picker's months sit on endless sideways pages.
   A page follows the finger with the next one beside it, in both directions, and arrows turn it too.
 - The add page's Expenses, Income and Transfer tabs are pages in the same way.
-- Other pages slide in from the side, and the page behind slides out with them.
+- Other pages cross-fade in about 130 ms, the new one growing the last 2% into place, and go in
+  about 90 ms: the reference cross-fades in about 70 ms, and a quarter-second slide read as waiting.
 - Hold a bill: Edit, Add again today, Delete. A swipe is never a delete, because it would catch people
   turning pages. Deleting a bill offers Undo for a few seconds, not a confirmation.
 - Hold backspace on the keypad: clear the amount.
