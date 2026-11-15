@@ -1,5 +1,10 @@
 package com.xern.xrnwallet.ui
 
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.outlined.Delete
@@ -301,16 +306,12 @@ fun BillEditScreen(id: Long, date: Long, initialType: Int) {
                 TransferForm(
                     from = s.accountById[accountId],
                     to = s.accountById[toAccountId],
-                    feeCents = feeCents,
                     onFrom = { dialog = "from" },
                     onTo = { dialog = "to" },
                     onSwap = {
                         val previous = accountId
                         accountId = toAccountId
                         toAccountId = previous
-                    },
-                    onFee = {
-                        if (accountId == null) toast("Please select an account") else dialog = "fee"
                     },
                 )
             } else {
@@ -325,12 +326,12 @@ fun BillEditScreen(id: Long, date: Long, initialType: Int) {
                 }
             }
         }
-        AnimatedVisibility(tab != BillType.TRANSFER) {
-            Row(
-                Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                val chips = remember { List(3) { MutableInteractionSource() } }
+        val chips = remember { List(4) { MutableInteractionSource() } }
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (tab != BillType.TRANSFER) {
                 Box(
                     Modifier
                         .widthIn(max = 200.dp)
@@ -347,40 +348,39 @@ fun BillEditScreen(id: Long, date: Long, initialType: Int) {
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+                Spacer(Modifier.width(8.dp))
+            }
+            ChipIcon(Icons.AutoMirrored.Filled.Label, "Tags", lit = tagIds.isNotEmpty(), source = chips[1]) { dialog = "tags" }
+            if (tab == BillType.TRANSFER) {
+                Spacer(Modifier.width(8.dp))
                 Box(
                     Modifier
-                        .padding(start = 8.dp)
-                        .springPress(chips[1])
+                        .springPress(chips[3])
                         .clip(RoundedCornerShape(12.dp))
-                        .background(if (tagIds.isEmpty()) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.primary)
-                        .clickable(chips[1], ripple()) { dialog = "tags" }
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                        .background(MaterialTheme.colorScheme.primary)
+                        .clickable(chips[3], ripple()) { if (accountId == null) toast("Please select an account") else dialog = "fee" }
+                        .padding(horizontal = 14.dp, vertical = 6.dp),
                 ) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.Label,
-                        "Tags",
-                        Modifier.size(20.dp),
-                        tint = if (tagIds.isEmpty()) MaterialTheme.colorScheme.onSurface else Color.Black,
+                    Text(
+                        if (feeCents == 0L) "Fee" else "Fee ${f.money(feeCents, s.accountById[accountId]?.currency ?: f.base)}",
+                        color = Color.Black,
+                        maxLines = 1,
                     )
                 }
-                Row(
-                    Modifier
-                        .padding(start = 8.dp)
-                        .springPress(chips[2])
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                        .clickable(chips[2], ripple()) { budgetTick(); inBudget = !inBudget }
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
-                        .semantics { contentDescription = if (inBudget) "Counted in the budget" else "Left out of the budget" },
-                    verticalAlignment = Alignment.CenterVertically,
+            }
+            Spacer(Modifier.weight(1f))
+            if (tab != BillType.TRANSFER) {
+                // An icon like the tag one, lit when the bill is left out, as tags light when set.
+                ChipIcon(
+                    Icons.Filled.DonutLarge,
+                    if (inBudget) "Counted in the budget" else "Left out of the budget",
+                    lit = !inBudget,
+                    struck = !inBudget,
+                    source = chips[2],
                 ) {
-                    Icon(Icons.Filled.DonutLarge, null, Modifier.size(18.dp))
-                    Text(
-                        "Budget",
-                        Modifier.padding(start = 6.dp),
-                        color = if (inBudget) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-                        textDecoration = if (inBudget) null else TextDecoration.LineThrough,
-                    )
+                    budgetTick()
+                    inBudget = !inBudget
+                    toast(if (inBudget) "Counted in the budget" else "Left out of the budget")
                 }
             }
         }
@@ -401,13 +401,16 @@ fun BillEditScreen(id: Long, date: Long, initialType: Int) {
             color = MaterialTheme.colorScheme.surface,
             shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp),
         ) {
-            Column(Modifier.navigationBarsPadding().padding(12.dp)) {
+            // Margins, note box and keypad measured from the reference: 17 dp at the sides, a
+            // 63 dp note box, 17 dp above the keys. What that saves goes to the categories.
+            Column(Modifier.navigationBarsPadding().padding(horizontal = 17.dp, vertical = 10.dp)) {
                 Row(
                     Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
                         .background(MaterialTheme.colorScheme.surfaceVariant)
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                        .heightIn(min = 58.dp)
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     val preview = remember(photo) { photo?.let { BitmapFactory.decodeFile(it)?.asImageBitmap() } }
@@ -456,7 +459,8 @@ fun BillEditScreen(id: Long, date: Long, initialType: Int) {
                         ) { shown ->
                             Text(
                                 shown.replace('.', settings.moneyFormat.decimalChar),
-                                fontSize = if (shown.length > 12) 18.sp else 26.sp,
+                                fontSize = if (shown.length > 12) 18.sp else 25.sp,
+                                lineHeight = 28.sp,
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1,
                             )
@@ -470,7 +474,7 @@ fun BillEditScreen(id: Long, date: Long, initialType: Int) {
                         )
                     }
                 }
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(17.dp))
                 Keypad(
                     amount = amount,
                     decimal = settings.moneyFormat.decimalChar,
@@ -579,7 +583,9 @@ private fun CategoryGrid(
                 Modifier
                     .clip(RoundedCornerShape(12.dp))
                     .clickable(source, null) { tick(); onPick(category) }
-                    .padding(vertical = 6.dp),
+                    // Rows a little further apart than before, as the reference's are, now the keypad
+                    // leaves the room.
+                    .padding(vertical = 9.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Box(
@@ -620,27 +626,125 @@ private fun CategoryGrid(
     }
 }
 
+private val SWAP_WIDTH = 64.dp
+
+/**
+ * A transfer as the reference lays it out: one card, the two accounts side by side, each a square
+ * button (+ until one is chosen, then its logo, its name below), a swap between them. Labels,
+ * buttons and names are each a row of their own, so the two sides stay level whatever is chosen.
+ */
 @Composable
 private fun TransferForm(
     from: Account?,
     to: Account?,
-    feeCents: Long,
     onFrom: () -> Unit,
     onTo: () -> Unit,
     onSwap: () -> Unit,
-    onFee: () -> Unit,
 ) {
-    val f = fmt()
-    Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    val tick = rememberTick()
+    Column(Modifier.fillMaxSize().padding(horizontal = 17.dp, vertical = 20.dp)) {
         Panel {
-            ListRow("Payment account", from?.name?.trim() ?: "Select", onClick = onFrom)
-            Divider()
-            ListRow("Receive account", to?.name?.trim() ?: "Select", onClick = onTo)
+            Column(Modifier.fillMaxWidth().padding(vertical = 22.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Payment account", Modifier.weight(1f), textAlign = TextAlign.Center, style = MaterialTheme.typography.bodyLarge)
+                    Spacer(Modifier.width(SWAP_WIDTH))
+                    Text("Receive account", Modifier.weight(1f), textAlign = TextAlign.Center, style = MaterialTheme.typography.bodyLarge)
+                }
+                Row(Modifier.fillMaxWidth().padding(top = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { TransferButton("Payment account", from, onFrom) }
+                    val source = remember { MutableInteractionSource() }
+                    Box(
+                        Modifier
+                            .width(SWAP_WIDTH)
+                            .springPress(source, depth = 0.85f)
+                            .clip(CircleShape)
+                            .clickable(source, ripple()) { tick(); onSwap() }
+                            .padding(vertical = 10.dp)
+                            .semantics { contentDescription = "Swap accounts" },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(Icons.Filled.SwapHoriz, null, Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
+                    }
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { TransferButton("Receive account", to, onTo) }
+                }
+                if (from != null || to != null) {
+                    Row(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                        listOf(from, null, to).forEachIndexed { i, account ->
+                            if (i == 1) {
+                                Spacer(Modifier.width(SWAP_WIDTH))
+                            } else {
+                                Text(
+                                    account?.name?.trim().orEmpty(),
+                                    Modifier.weight(1f).padding(horizontal = 6.dp),
+                                    textAlign = TextAlign.Center,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
-        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            IconButton(onSwap) { Icon(Icons.Filled.SwapVert, "Swap accounts") }
+    }
+}
+
+/** One end of a transfer: a 54 dp square, as the reference's, with + until an account is chosen. */
+@Composable
+private fun TransferButton(label: String, account: Account?, onClick: () -> Unit) {
+    val source = remember { MutableInteractionSource() }
+    Box(
+        Modifier
+            .springPress(source, depth = 0.9f)
+            .size(54.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(if (account == null) Color.White else Color.Transparent)
+            .clickable(source, ripple(), onClick = onClick)
+            .semantics { contentDescription = account?.name?.trim() ?: "Choose the ${label.lowercase()}" },
+        contentAlignment = Alignment.Center,
+    ) {
+        if (account == null) {
+            Icon(Icons.Filled.Add, null, Modifier.size(28.dp), tint = Color.Black)
+        } else {
+            AccountBubble(account.name, account.icon, account.color, 54.dp)
         }
-        Panel { ListRow("Fee", if (feeCents == 0L) "None" else f.money(feeCents, from?.currency ?: f.base), onClick = onFee) }
+    }
+}
+
+private val KEY_GAP = 6.dp
+
+/** A small square chip holding one icon; lit in the accent when it holds something other than the usual. */
+@Composable
+private fun ChipIcon(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    lit: Boolean,
+    source: MutableInteractionSource,
+    struck: Boolean = false,
+    onClick: () -> Unit,
+) {
+    val ink = if (lit) Color.Black else MaterialTheme.colorScheme.onSurface
+    Box(
+        Modifier
+            .springPress(source)
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (lit) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
+            .clickable(source, ripple(), onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 6.dp)
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            icon,
+            null,
+            Modifier.size(20.dp).drawWithContent {
+                drawContent()
+                // Struck through, for "left out".
+                if (struck) drawLine(ink, Offset(2f, size.height - 2f), Offset(size.width - 2f, 2f), strokeWidth = 2.dp.toPx(), cap = StrokeCap.Round)
+            },
+            tint = ink,
+        )
     }
 }
 
@@ -670,9 +774,11 @@ private fun Keypad(
         onAmount(Calculator.press(amount, key))
     }
     val pending = Calculator.hasPendingSum(amount)
-    val height: Dp = 54.dp
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    // The reference's keys, measured on the phone: 117 px tall and 15 px apart at its 2.5 px per dp
+    // (display size set to density 400), so 46.8 dp and 6 dp.
+    val height: Dp = 46.8.dp
+    Column(verticalArrangement = Arrangement.spacedBy(KEY_GAP)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(KEY_GAP)) {
             "123".forEach { Key(it.toString(), Modifier.weight(1f), height) { press(it) } }
             Key(
                 "",
@@ -688,21 +794,21 @@ private fun Keypad(
                 onAmount(Calculator.backspace(amount))
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(KEY_GAP)) {
             "456".forEach { Key(it.toString(), Modifier.weight(1f), height) { press(it) } }
-            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(KEY_GAP)) {
                 Key("+", Modifier.weight(1f), height) { press('+') }
                 Key("×", Modifier.weight(1f), height) { press('×') }
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(KEY_GAP)) {
             "789".forEach { Key(it.toString(), Modifier.weight(1f), height) { press(it) } }
-            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(KEY_GAP)) {
                 Key("-", Modifier.weight(1f), height) { press('-') }
                 Key("÷", Modifier.weight(1f), height) { press('÷') }
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(KEY_GAP)) {
             Key(decimal.toString(), Modifier.weight(1f), height) { press('.') }
             Key("0", Modifier.weight(1f), height) { press('0') }
             Key(dateLabel, Modifier.weight(1f), height, onClick = onDate)
