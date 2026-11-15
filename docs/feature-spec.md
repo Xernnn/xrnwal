@@ -49,8 +49,12 @@ twice.
 - Account chip. Its picker is a page of cards grouped Savings / Credit, each with "Balance" over the
   amount and the current one outlined; + to create, "Do not bind personal accounts" at the foot.
 - Tag button (multi-select, + to create).
-- Budget chip: counted in the budget or left out (struck through). Our addition: the reference has
-  this switch only on its bill detail page, which a tap no longer opens.
+- Budget icon at the right of the row, like the tag button: lit and struck through when a bill is
+  left out of the budget, with a short message saying which. Our addition: the reference has this
+  switch only on its bill detail page, which a tap no longer opens.
+- Keypad and note box at the reference's size, measured on the phone: keys 117 px tall and 15 px
+  apart, the note box 159 px, 43 px margins (46.8 dp, 6 dp, 63 dp and 17 dp at the phone's 2.5 px
+  per dp). The categories get the rest.
 - Photo attachment (tap the thumbnail to see it large, or remove it), note, amount with currency
   switch (billing currencies only). The amount rolls up as digits are typed and down as they go.
 - Keypad: digits, decimal, backspace, + - x /, date button ("Today"), save. While a sum is pending
@@ -58,8 +62,10 @@ twice.
 - Date and time picker: the month, with the time on hour and minute wheels below it in the same
   card (as the reference), 24-hour or with AM/PM as the phone is set. Each step ticks. Future dates
   are selectable only through recurring items.
-- Transfer: payment account, receive account, swap button, Fee (requires an account first, tip:
-  "Please select an account").
+- Transfer: one card with Payment account and Receive account side by side, each a 54 dp square
+  button (+ until an account is chosen, then its logo with its name below), a swap between them.
+  The tag button and a Fee chip (requires an account first, tip: "Please select an account") sit
+  above the keypad, the chip reading "Fee $3" once a fee is set.
 
 ## Bill detail
 
