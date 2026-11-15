@@ -69,6 +69,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import com.xern.xrnwallet.domain.MoneyFormat
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.*
 import androidx.compose.runtime.LaunchedEffect
@@ -439,15 +443,7 @@ fun BillEditScreen(id: Long, date: Long, initialType: Int) {
                         },
                     )
                     Column(horizontalAlignment = Alignment.End) {
-                        // The reference redraws the amount in place on each key, in a single frame (screen
-                        // recording, 2026-11-15). Sliding it half a line and fading it read as a jump.
-                        Text(
-                            amount.replace('.', settings.moneyFormat.decimalChar),
-                            fontSize = if (amount.length > 12) 18.sp else 25.sp,
-                            lineHeight = 28.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                        )
+                        AmountText(amount, settings.moneyFormat)
                         Text(
                             currency,
                             Modifier.clickable { dialog = "currency" },
@@ -696,6 +692,36 @@ private fun TransferButton(label: String, account: Account?, onClick: () -> Unit
 }
 
 private val KEY_GAP = 6.dp
+
+// The reference's amount, measured on the phone: full size until it is 277 px wide, then smaller to stay
+// that wide (both "1.234,5+6.789" and "123.456.789.012" came out 277 px). That is 111 dp at 2.5 px per dp.
+private val AMOUNT_WIDTH = 111.dp
+private const val AMOUNT_LARGEST_SP = 25
+private const val AMOUNT_SMALLEST_SP = 12
+
+/** The largest whole size from [largest] down to [smallest] that [fits], or [smallest] when none does. */
+internal fun fittingSize(largest: Int, smallest: Int, fits: (Int) -> Boolean): Int =
+    (largest downTo smallest).firstOrNull(fits) ?: smallest
+
+/**
+ * The keypad's amount, grouped in threes as the reference shows it. It changes in place on each key, in
+ * a single frame, as the reference's does (screen recording, 2026-11-15): sliding it half a line and
+ * fading it read as a jump. A long amount gets smaller to keep the reference's width, measured before
+ * it is drawn, so it never shows at one size and then another.
+ */
+@Composable
+private fun AmountText(amount: String, format: MoneyFormat) {
+    val shown = Calculator.display(amount, format.groupChar, format.decimalChar)
+    val style = LocalTextStyle.current.merge(TextStyle(fontWeight = FontWeight.Bold, lineHeight = 28.sp))
+    val measurer = rememberTextMeasurer()
+    val room = with(LocalDensity.current) { AMOUNT_WIDTH.roundToPx() }
+    val size = remember(shown, style, room) {
+        fittingSize(AMOUNT_LARGEST_SP, AMOUNT_SMALLEST_SP) { sp ->
+            measurer.measure(shown, style.copy(fontSize = sp.sp), maxLines = 1, softWrap = false).size.width <= room
+        }
+    }
+    Text(shown, style = style.copy(fontSize = size.sp), maxLines = 1, softWrap = false)
+}
 
 /** A small square chip holding one icon; lit in the accent when it holds something other than the usual. */
 @Composable

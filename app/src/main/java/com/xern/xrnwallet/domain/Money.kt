@@ -93,7 +93,7 @@ data class MoneyFormat(
     val decimals: DecimalMode = DecimalMode.ADAPTIVE,
     val locale: Locale = Locale.getDefault(),
 ) {
-    private val groupChar: Char
+    val groupChar: Char
         get() = when (separators) {
             SeparatorStyle.COMMA_DOT -> ','
             SeparatorStyle.DOT_COMMA -> '.'
