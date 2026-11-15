@@ -56,8 +56,8 @@ fun AccountsScreen() {
             Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, bottom = 40.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Panel {
-                Column(Modifier.padding(20.dp)) {
+            NetAssetsTicket {
+                Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 22.dp)) {
                     Muted(if (hide) "Prosperous" else "Net Assets")
                     Text(shown(f.money(summary.net)), fontSize = 32.sp, fontWeight = FontWeight.Bold)
                     Row(Modifier.padding(top = 14.dp)) {

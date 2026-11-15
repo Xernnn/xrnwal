@@ -1,5 +1,25 @@
 package com.xern.xrnwallet.ui
 
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.material.icons.filled.Leaderboard
+import androidx.compose.material.icons.outlined.Face
+import androidx.compose.material.icons.outlined.Leaderboard
+import androidx.compose.material.icons.outlined.AccountBalanceWallet
+import androidx.compose.material.icons.outlined.AccountBalance
+import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -10,10 +30,7 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.Animatable
 import android.os.SystemClock
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -67,7 +84,11 @@ fun NavHostController.openBill(id: Long) = navigate("edit?id=$id")
 
 const val NO_DATE = Long.MIN_VALUE
 
-private val pageSlide = tween<IntOffset>(260, easing = FastOutSlowInEasing)
+// Pages cross-fade quickly, the way the reference app's do (about 70 ms there), rather than sliding
+// across over a quarter of a second: a slide reads as waiting for the page, a quick fade as the page
+// simply being there. The new page also grows the last 2% into place, so it doesn't look pasted on.
+private val pageIn = tween<Float>(130, easing = LinearOutSlowInEasing)
+private val pageOut = tween<Float>(90, easing = FastOutLinearInEasing)
 
 /** Far longer than any slide, so a stuck animation can't leave the app ignoring touches. */
 private const val SLIDE_LIMIT_MILLIS = 1_500L
@@ -133,11 +154,10 @@ fun WalletRoot(activity: MainActivity) {
                         navController = nav,
                         startDestination = "main",
                         modifier = Modifier.ignoreTouchesDuringSlides(nav),
-                        // Both pages move together, side by side, so opening one reads as turning to it.
-                        enterTransition = { slideInHorizontally(pageSlide) { it } },
-                        exitTransition = { slideOutHorizontally(pageSlide) { -it } },
-                        popEnterTransition = { slideInHorizontally(pageSlide) { -it } },
-                        popExitTransition = { slideOutHorizontally(pageSlide) { it } },
+                        enterTransition = { fadeIn(pageIn) + scaleIn(pageIn, initialScale = 0.98f) },
+                        exitTransition = { fadeOut(pageOut) },
+                        popEnterTransition = { fadeIn(pageIn) },
+                        popExitTransition = { fadeOut(pageOut) + scaleOut(pageOut, targetScale = 0.98f) },
                     ) { routes() }
                 }
                 UndoBar(undo, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 100.dp))
@@ -249,16 +269,63 @@ private fun MainShell() {
     }
 }
 
+private val FAB_SIZE = 56.dp
+private val FAB_RISE = 26.dp // how far the + sits above the bar's top edge
+private val CRADLE_GAP = 6.dp
+
+/**
+ * The bar's outline: a rectangle with a round notch cut into its top edge, wide enough to hold the +
+ * with a ring of page showing round it, and soft shoulders where the notch meets the edge.
+ */
+private class CradleShape(private val radius: Float, private val centreY: Float, private val shoulder: Float) : Shape {
+    override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
+        val cx = size.width / 2f
+        // Where the notch's circle crosses the top edge, and the angle (from straight right, clockwise,
+        // as y grows downwards) it crosses at on the left: the arc runs under the + from there round
+        // to the right. Each end is trimmed a few degrees down the circle, and a shoulder curve
+        // eases the edge into it, so the notch has no sharp corner.
+        val half = kotlin.math.sqrt((radius * radius - centreY * centreY).coerceAtLeast(0f))
+        val cross = Math.toDegrees(kotlin.math.asin((centreY / radius).coerceIn(-1f, 1f).toDouble())).toFloat()
+        val trim = 8f
+        val startDeg = 180f + cross - trim
+        val sweep = -(180f + 2 * cross - 2 * trim)
+        val startRad = Math.toRadians(startDeg.toDouble())
+        val path = Path().apply {
+            moveTo(0f, 0f)
+            lineTo(cx - half - shoulder, 0f)
+            quadraticTo(cx - half, 0f, cx + radius * kotlin.math.cos(startRad).toFloat(), centreY + radius * kotlin.math.sin(startRad).toFloat())
+            arcTo(Rect(cx - radius, centreY - radius, cx + radius, centreY + radius), startDeg, sweep, forceMoveTo = false)
+            quadraticTo(cx + half, 0f, cx + half + shoulder, 0f)
+            lineTo(size.width, 0f)
+            lineTo(size.width, size.height)
+            lineTo(0f, size.height)
+            close()
+        }
+        return Outline.Generic(path)
+    }
+}
+
 @Composable
 private fun BottomBar(tab: Int, onSelect: (Int) -> Unit, onAdd: () -> Unit) {
+    val density = LocalDensity.current
+    val cradle = remember(density) {
+        with(density) {
+            CradleShape(
+                radius = (FAB_SIZE / 2 + CRADLE_GAP).toPx(),
+                centreY = (FAB_SIZE / 2 - FAB_RISE).toPx(),
+                shoulder = 10.dp.toPx(),
+            )
+        }
+    }
     Box {
-        Surface(color = MaterialTheme.colorScheme.surface) {
+        Surface(color = MaterialTheme.colorScheme.surface, shape = cradle) {
             Row(Modifier.fillMaxWidth().navigationBarsPadding().height(70.dp)) {
-                BarItem("Home", Icons.Filled.AccountBalance, tab == 0, Modifier.weight(1f)) { onSelect(0) }
-                BarItem("Reports", Icons.Filled.BarChart, tab == 1, Modifier.weight(1f)) { onSelect(1) }
+                BarItem("Home", Icons.Filled.AccountBalance, Icons.Outlined.AccountBalance, tab == 0, Modifier.weight(1f)) { onSelect(0) }
+                BarItem("Reports", Icons.Filled.Leaderboard, Icons.Outlined.Leaderboard, tab == 1, Modifier.weight(1f)) { onSelect(1) }
                 Spacer(Modifier.weight(1f))
-                BarItem("Accounts", Icons.Filled.AccountBalanceWallet, tab == 2, Modifier.weight(1f)) { onSelect(2) }
-                BarItem("Mine", Icons.Filled.Person, tab == 3, Modifier.weight(1f)) { onSelect(3) }
+                BarItem("Accounts", Icons.Filled.AccountBalanceWallet, Icons.Outlined.AccountBalanceWallet, tab == 2, Modifier.weight(1f)) { onSelect(2) }
+                // Material's filled face fills only the hair, so Mine's is a disc behind the line face.
+                BarItem("Mine", null, Icons.Outlined.Face, tab == 3, Modifier.weight(1f)) { onSelect(3) }
             }
         }
         val source = remember { MutableInteractionSource() }
@@ -267,23 +334,27 @@ private fun BottomBar(tab: Int, onSelect: (Int) -> Unit, onAdd: () -> Unit) {
         Box(
             Modifier
                 .align(Alignment.TopCenter)
-                .offset(y = (-26).dp)
+                .offset(y = -FAB_RISE)
                 .graphicsLayer {
                     scaleX = scale
                     scaleY = scale
                 }
-                .size(56.dp)
+                .size(FAB_SIZE)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.primary)
                 .clickable(source, ripple()) { tick(); onAdd() }
                 .semantics { contentDescription = "Add bill" },
             contentAlignment = Alignment.Center,
-        ) { Icon(Icons.Filled.Add, null, tint = Color.Black, modifier = Modifier.size(28.dp)) }
+        ) { Icon(Icons.Filled.Add, null, tint = Color.Black, modifier = Modifier.size(30.dp)) }
     }
 }
 
+/**
+ * A tab: a line icon, and when chosen the same icon filled in the accent with its lines drawn dark
+ * over it, which reads on a light bar as well as a dark one. The choice hops as it lands.
+ */
 @Composable
-private fun BarItem(label: String, icon: ImageVector, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+private fun BarItem(label: String, filled: ImageVector?, outlined: ImageVector, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
     val tick = rememberTick()
     val hop = remember { Animatable(1f) }
     var wasSelected by remember { mutableStateOf(selected) }
@@ -294,10 +365,10 @@ private fun BarItem(label: String, icon: ImageVector, selected: Boolean, modifie
         }
         wasSelected = selected
     }
-    val pill by animateColorAsState(
-        if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.3f) else Color.Transparent,
-        tween(180),
-        label = "pill",
+    val fill by animateColorAsState(
+        if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
+        tween(140),
+        label = "fill",
     )
     Column(
         modifier
@@ -309,25 +380,25 @@ private fun BarItem(label: String, icon: ImageVector, selected: Boolean, modifie
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        // Yellow on white is hard to see, so the choice is a soft pill and the icon stays dark.
-        Box(
-            Modifier
-                .graphicsLayer { scaleX = hop.value; scaleY = hop.value }
-                .clip(CircleShape)
-                .background(pill)
-                .padding(horizontal = 14.dp, vertical = 2.dp),
-        ) {
+        Box(Modifier.graphicsLayer { scaleX = hop.value; scaleY = hop.value }.size(28.dp), contentAlignment = Alignment.Center) {
+            if (filled != null) {
+                Icon(filled, null, tint = fill, modifier = Modifier.size(28.dp))
+            } else {
+                Box(Modifier.size(21.dp).clip(CircleShape).background(fill))
+            }
             Icon(
-                icon,
+                outlined,
                 null,
-                tint = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(26.dp),
+                tint = if (selected) Color(0xFF1B1B1E) else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(28.dp),
             )
         }
         Text(
             label,
+            Modifier.padding(top = 2.dp),
             color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 13.sp,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
         )
     }
 }

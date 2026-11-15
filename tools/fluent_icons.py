@@ -44,6 +44,7 @@ FOLDERS = {
     "🔍": "Magnifying glass tilted left", "🔒": "Locked", "🔤": "Input latin letters", "🖼": "Framed picture",
     "🗓": "Spiral calendar", "🛒": "Shopping cart", "🦊": "Fox", "🧧": "Red envelope", "🛋": "Couch and lamp",
     "🌙": "Crescent moon", "⛄": "Snowman without snow", "👕": "T-shirt", "🗺": "World map",
+    "😄": "Grinning face with smiling eyes",
 }
 
 EMOJI_LITERAL = re.compile(r'"([^"\\]{1,4})"')

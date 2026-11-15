@@ -2,6 +2,7 @@ package com.xern.xrnwallet
 
 import com.xern.xrnwallet.domain.Dates
 import com.xern.xrnwallet.ui.Art
+import com.xern.xrnwallet.ui.budgetFace
 import com.xern.xrnwallet.ui.hourOf
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -52,6 +53,19 @@ class LookTest {
         assertFalse(Art.isDark("🍺"))
         // A dark subject in another style is a symbol, which takes its own colour.
         assertFalse(Art.isDark("s2:🎵"))
+    }
+
+    @Test
+    fun theBudgetRingsFaceFollowsWhatsLeft() {
+        assertEquals("😄", budgetFace(80_00, 80))
+        assertEquals("😄", budgetFace(60_00, 60))
+        assertEquals("🙂", budgetFace(59_00, 59))
+        assertEquals("🙂", budgetFace(30_00, 30))
+        assertEquals("😐", budgetFace(1_00, 1))
+        assertEquals("😟", budgetFace(0, 0))
+        // Over budget the share left reads 0 too, but the money says it's gone past.
+        assertEquals("😱", budgetFace(-5_00, 0))
+        listOf("😄", "🙂", "😐", "😟", "😱").forEach { assertNotNull(it, Art.drawable(it)) }
     }
 
     @Test

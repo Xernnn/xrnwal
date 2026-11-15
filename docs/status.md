@@ -112,6 +112,21 @@ server, was wiped, and restored them all with the same totals.
 - Reminders edit the title and body directly, where the reference ticks either the preset text or
   custom content.
 
+## Look and feel against the reference (2026-11-15)
+
+Compared on the real phone, both apps on the same September data, screen by screen, with page
+openings recorded and timed frame by frame. Now matched: pages cross-fade in (reference about 70 ms,
+this app about 70 ms in and 100 ms out, where it slid across in 200 to 230 ms); full-colour icons
+everywhere, Mine's tiles included; a face in the budget ring and Exceeded in amber; the summary
+card's dividers; transfers as From over To; the ledger's name beside its notebook and "Sep ▾"; the
+bottom bar's notch, line icons and accent-filled choice; a full page to choose an account; the
+marker under the chosen tab and the camera | pencil note line; net assets as a ticket; the
+calendar's weekday band.
+
+Not copied, as they're the reference's own artwork: its mascot, its notebook covers and the doodles
+on its keys. The colour icons are Fluent Emoji (see the README's credits), and the faces, the ticket's
+drawing and the notch are this app's own.
+
 ## How far the comparison goes
 
 Screens were compared by looking at them and by matching their recorded labels against this code. A

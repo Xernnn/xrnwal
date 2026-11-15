@@ -1,5 +1,9 @@
 package com.xern.xrnwallet.ui
 
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.material.icons.filled.KeyboardDoubleArrowDown
 import androidx.compose.material3.ripple
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.animation.core.animateDpAsState
@@ -357,19 +361,32 @@ fun UnderlineTabs(tabs: List<String>, selected: Int, modifier: Modifier = Modifi
                     .padding(vertical = 10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text(label, style = MaterialTheme.typography.titleMedium, maxLines = 1)
-                val width by animateDpAsState(
-                    if (index == selected) 44.dp else 0.dp,
-                    spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMediumLow),
-                    label = "underline",
+                // The chosen tab is struck through its lower half with a marker, swept in from the
+                // left as a highlighter would be, the way the reference marks its tabs.
+                val reveal by animateFloatAsState(
+                    if (index == selected) 1f else 0f,
+                    tween(if (index == selected) 220 else 120),
+                    label = "marker",
                 )
-                Box(
-                    Modifier
-                        .padding(top = 3.dp)
-                        .width(width)
-                        .height(4.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(MaterialTheme.colorScheme.primary),
+                val marker = MaterialTheme.colorScheme.primary
+                Text(
+                    label,
+                    Modifier.padding(bottom = 7.dp).drawBehind {
+                        if (reveal > 0f) {
+                            val left = -size.width * 0.08f
+                            val full = size.width * 1.16f
+                            rotate(-2.5f, Offset(size.width / 2, size.height * 0.72f)) {
+                                drawRoundRect(
+                                    marker,
+                                    topLeft = Offset(left, size.height * 0.5f),
+                                    size = Size(full * reveal, size.height * 0.42f),
+                                    cornerRadius = CornerRadius(size.height * 0.2f),
+                                )
+                            }
+                        }
+                    },
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
                 )
             }
         }
@@ -440,7 +457,10 @@ fun BillRow(bill: Bill, snapshot: Snapshot, showDate: Boolean = false, showAccou
             if (bill.type == BillType.TRANSFER) {
                 val from = snapshot.accountById[bill.accountId]?.name ?: "No account"
                 val to = snapshot.accountById[bill.toAccountId]?.name ?: "No account"
-                Text("$from » $to", style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                // From over To with a small arrow down between, as the reference writes a transfer.
+                Text(from, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Icon(Icons.Filled.KeyboardDoubleArrowDown, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                Text(to, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (bill.note.isNotEmpty()) Muted(bill.note, maxLines = 1)
             } else {
                 Text(snapshot.categoryLabel(bill.categoryId), style = MaterialTheme.typography.bodyLarge, maxLines = 1)

@@ -71,7 +71,7 @@ fun LedgersScreen() {
                         .clickable { nav.navigate("ledger/${ledger.id}") }
                         .padding(14.dp),
                 ) {
-                    Text(icon, fontSize = 34.sp)
+                    Glyph(icon, 40.dp)
                     Text(ledger.name, Modifier.padding(top = 18.dp), color = Color.Black, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(billCount(s.bills.count { it.ledgerId == ledger.id }), color = Color.Black.copy(alpha = 0.7f), fontSize = 13.sp)
                 }
@@ -102,7 +102,7 @@ fun LedgerEditScreen(id: Long) {
                         val position = rowIndex * 3 + index
                         Selectable(position == cover, Modifier.weight(1f), onClick = { cover = position }) {
                             Box(Modifier.fillMaxWidth().height(84.dp).background(Color(color)), contentAlignment = Alignment.Center) {
-                                Text(icon, fontSize = 30.sp)
+                                Glyph(icon, 38.dp)
                             }
                         }
                     }

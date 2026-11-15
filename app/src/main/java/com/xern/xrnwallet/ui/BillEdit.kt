@@ -1,5 +1,17 @@
 package com.xern.xrnwallet.ui
 
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.PhotoCamera
+import com.xern.xrnwallet.data.AccountKind
+import androidx.compose.material.icons.outlined.CreditCardOff
+import androidx.compose.material.icons.outlined.AddBox
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.Dialog
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.fadeIn
@@ -271,11 +283,11 @@ fun BillEditScreen(id: Long, date: Long, initialType: Int) {
                 IconButton({
                     undo.copyToToday(existing, s.tagIdsOf(existing.id))
                     nav.leavePage()
-                }) { Icon(Icons.Filled.ContentCopy, "Add again today") }
+                }) { Icon(Icons.Outlined.ContentCopy, "Add again today") }
                 IconButton({
                     undo.delete(existing, s.tagIdsOf(existing.id))
                     nav.leavePage()
-                }) { Icon(Icons.Filled.Delete, "Delete", tint = Color(0xFFFF3B30)) }
+                }) { Icon(Icons.Outlined.Delete, "Delete", tint = Color(0xFFFF3B30)) }
             }
             Text(
                 s.ledgerById[ledgerId]?.name ?: "No ledger",
@@ -408,17 +420,20 @@ fun BillEditScreen(id: Long, date: Long, initialType: Int) {
                         )
                     } else {
                         Icon(
-                            Icons.Filled.CameraAlt,
+                            Icons.Outlined.PhotoCamera,
                             "Attach photo",
                             Modifier.size(28.dp).clickable {
                                 photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                             },
                         )
                     }
+                    // Camera | pencil, then the note, as the reference lays its note line out.
+                    Box(Modifier.padding(start = 10.dp).width(1.dp).height(22.dp).background(MaterialTheme.colorScheme.outline))
+                    Icon(Icons.Outlined.Edit, null, Modifier.padding(start = 10.dp).size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     BasicTextField(
                         value = note,
                         onValueChange = { note = it },
-                        modifier = Modifier.weight(1f).padding(horizontal = 12.dp).semantics { contentDescription = "Note" },
+                        modifier = Modifier.weight(1f).padding(start = 6.dp, end = 12.dp).semantics { contentDescription = "Note" },
                         textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp),
                         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                         singleLine = true,
@@ -483,6 +498,7 @@ fun BillEditScreen(id: Long, date: Long, initialType: Int) {
                 accounts = usable,
                 allowNone = target == "account",
                 onDismiss = { dialog = null },
+                selected = if (target == "to") toAccountId else accountId,
                 onCreate = { dialog = null; nav.navigate("account/edit") },
             ) { picked ->
                 when (target) {
@@ -745,46 +761,94 @@ private fun Key(
     }
 }
 
+/**
+ * Choosing an account: a page of roomy cards, grouped as the Accounts tab groups them, each with its
+ * balance on a line of its own and the current one outlined, as the reference lays it out. A dialog
+ * squeezed names and balances into one line ("CommonWea…$1.488,03").
+ */
 @Composable
 fun AccountDialog(
     accounts: List<Account>,
     allowNone: Boolean,
     onDismiss: () -> Unit,
+    selected: Long? = null,
     onCreate: (() -> Unit)? = null,
     onPick: (Long?) -> Unit,
 ) {
     val s = snap()
     val f = fmt()
-    DialogCard(onDismiss) {
-        Box(Modifier.fillMaxWidth()) {
-            Text("Accounts", Modifier.align(Alignment.Center), style = MaterialTheme.typography.titleMedium)
-            if (onCreate != null) {
-                IconButton(onCreate, Modifier.align(Alignment.CenterEnd)) { Icon(Icons.Filled.Add, "New account") }
-            }
-        }
-        Column(Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState())) {
-            accounts.forEach { account ->
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .clickable { onPick(account.id) }
-                        .padding(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    AccountBubble(account.name, account.icon, account.color, 40.dp)
-                    Text(account.name.trim(), Modifier.padding(start = 12.dp).weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(f.money(s.balance(account), account.currency))
+    // Edge to edge, padded here: a dialog window that fits itself to the system bars starts below the
+    // status bar but lays its content out a whole screen tall, so the foot fell off the bottom.
+    Dialog(onDismiss, DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            Column(Modifier.fillMaxSize().statusBarsPadding()) {
+                Row(Modifier.fillMaxWidth().height(60.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onDismiss) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
+                    Text("Select Account", Modifier.weight(1f), textAlign = TextAlign.Center, style = MaterialTheme.typography.titleLarge)
+                    if (onCreate != null) {
+                        IconButton(onCreate) { Icon(Icons.Outlined.AddBox, "New account") }
+                    } else {
+                        Spacer(Modifier.size(48.dp))
+                    }
                 }
-            }
-            if (allowNone) {
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .clickable { onPick(null) }
-                        .padding(14.dp),
-                ) { Muted("Do not bind personal accounts") }
+                Column(
+                    Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    accounts.groupBy { it.kind == AccountKind.CREDIT }.toSortedMap().forEach { (credit, group) ->
+                        Muted(if (credit) "Credit Account" else "Savings Account", Modifier.padding(top = 8.dp, start = 4.dp))
+                        group.forEach { account ->
+                            val chosen = account.id == selected
+                            val source = remember { MutableInteractionSource() }
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .springPress(source, depth = 0.97f)
+                                    .clip(CardShape)
+                                    .background(MaterialTheme.colorScheme.surface)
+                                    .border(if (chosen) 2.dp else 0.dp, if (chosen) MaterialTheme.colorScheme.primary else Color.Transparent, CardShape)
+                                    .clickable(source, ripple()) { onPick(account.id) }
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                AccountBubble(account.name, account.icon, account.color, 48.dp)
+                                Text(
+                                    account.name.trim(),
+                                    Modifier.padding(start = 14.dp).weight(1f),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Text("Balance", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(f.money(s.balance(account), account.currency), style = MaterialTheme.typography.bodyLarge, maxLines = 1)
+                                }
+                            }
+                        }
+                    }
+                    // In the list, after the last account, not pinned to the foot: on HyperOS this
+                    // window lays out taller than the screen, and a pinned foot fell off the bottom.
+                    if (allowNone) {
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(CardShape)
+                                .clickable { onPick(null) }
+                                .padding(vertical = 18.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Outlined.CreditCardOff, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                "Do not bind personal accounts",
+                                Modifier.padding(start = 6.dp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textDecoration = TextDecoration.Underline,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.navigationBarsPadding().height(120.dp))
+                }
             }
         }
     }

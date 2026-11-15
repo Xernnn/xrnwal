@@ -194,7 +194,7 @@ private fun TileGrid(tiles: List<Tile>) {
                                 .padding(vertical = 12.dp, horizontal = 4.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
-                            Text(tile.icon, fontSize = 34.sp)
+                            Glyph(tile.icon, 40.dp)
                             Text(
                                 tile.label,
                                 Modifier.padding(top = 6.dp),
