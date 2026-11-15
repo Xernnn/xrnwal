@@ -17,13 +17,6 @@ import androidx.compose.material.icons.outlined.AddBox
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.Dialog
-import androidx.compose.animation.togetherWith
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.SizeTransform
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.Spring
@@ -446,25 +439,15 @@ fun BillEditScreen(id: Long, date: Long, initialType: Int) {
                         },
                     )
                     Column(horizontalAlignment = Alignment.End) {
-                        AnimatedContent(
-                            amount,
-                            transitionSpec = {
-                                val up = targetState.length >= initialState.length
-                                (slideInVertically(tween(140)) { if (up) it / 2 else -it / 2 } + fadeIn(tween(140)))
-                                    .togetherWith(slideOutVertically(tween(110)) { if (up) -it / 2 else it / 2 } + fadeOut(tween(110)))
-                                    .using(SizeTransform(clip = false))
-                            },
-                            contentAlignment = Alignment.CenterEnd,
-                            label = "amount",
-                        ) { shown ->
-                            Text(
-                                shown.replace('.', settings.moneyFormat.decimalChar),
-                                fontSize = if (shown.length > 12) 18.sp else 25.sp,
-                                lineHeight = 28.sp,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                            )
-                        }
+                        // The reference redraws the amount in place on each key, in a single frame (screen
+                        // recording, 2026-11-15). Sliding it half a line and fading it read as a jump.
+                        Text(
+                            amount.replace('.', settings.moneyFormat.decimalChar),
+                            fontSize = if (amount.length > 12) 18.sp else 25.sp,
+                            lineHeight = 28.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                        )
                         Text(
                             currency,
                             Modifier.clickable { dialog = "currency" },
