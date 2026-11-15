@@ -160,7 +160,6 @@ fun DateTimeDialog(
     val months = rememberEndlessPages(YearMonth.from(initial)) { month, steps -> month.plusMonths(steps.toLong()) }
     var date by remember { mutableStateOf(initial.toLocalDate()) }
     var time by remember { mutableStateOf(initial.toLocalTime().withSecond(0).withNano(0)) }
-    var pickTime by remember { mutableStateOf(false) }
     DialogCard(onDismiss) {
         Text("Select date", Modifier.fillMaxWidth(), textAlign = TextAlign.Center, style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(10.dp))
@@ -170,30 +169,121 @@ fun DateTimeDialog(
                 DateGrid(month, date, latest, DayOfWeek.of(settings.firstDayOfWeek)) { date = it }
             }
         }
-        Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        // The time turns right here, as the hours and minutes of a clock do, rather than in a second
+        // dialog with the keyboard up over this one.
+        Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("Time", Modifier.weight(1f))
-            Box(
-                Modifier
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .clickable { pickTime = true }
-                    .padding(horizontal = 18.dp, vertical = 8.dp),
-            ) { Text(com.xern.xrnwallet.domain.Dates.time(time)) }
+            TimeWheels(time) { time = it }
         }
         CancelConfirmRow(onDismiss) { onPick(date.atTime(time)) }
     }
-    if (pickTime) TimeDialog(time, { pickTime = false }) { time = it; pickTime = false }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TimeDialog(initial: LocalTime, onDismiss: () -> Unit, onPick: (LocalTime) -> Unit) {
-    val state = rememberTimePickerState(initial.hour, initial.minute, is24Hour = false)
+    var time by remember { mutableStateOf(initial.withSecond(0).withNano(0)) }
     DialogCard(onDismiss) {
         Text("Time", Modifier.fillMaxWidth(), textAlign = TextAlign.Center, style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(12.dp))
-        TimeInput(state, Modifier.align(Alignment.CenterHorizontally))
-        CancelConfirmRow(onDismiss) { onPick(LocalTime.of(state.hour, state.minute)) }
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { TimeWheels(time) { time = it } }
+        CancelConfirmRow(onDismiss) { onPick(time) }
+    }
+}
+
+private val TIME_ROW = 40.dp
+private const val TIME_ROWS_SHOWN = 3
+
+/** Copies of the hours or the minutes, end to end, so a wheel turns on past 59 to 00 and back. */
+private const val TIME_LOOPS = 400
+
+/**
+ * Hours and minutes on wheels, as the phone writes times: 0 to 23, or 1 to 12 with AM and PM. Each
+ * number that passes the middle ticks, if haptic feedback is on.
+ */
+@Composable
+fun TimeWheels(time: LocalTime, onChange: (LocalTime) -> Unit) {
+    val h24 = android.text.format.DateFormat.is24HourFormat(androidx.compose.ui.platform.LocalContext.current)
+    var hour by remember { mutableIntStateOf(time.hour) }
+    var minute by remember { mutableIntStateOf(time.minute) }
+    fun send() = onChange(LocalTime.of(hour, minute))
+    Box(contentAlignment = Alignment.Center) {
+        Box(
+            Modifier
+                .matchParentSize()
+                .padding(vertical = TIME_ROW)
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (h24) {
+                LoopWheel(24, 0, hour, { "%02d".format(it) }) { hour = it; send() }
+            } else {
+                val twelve = if (hour % 12 == 0) 12 else hour % 12
+                LoopWheel(12, 1, twelve, { it.toString() }) { picked -> hour = hourOf(picked, pm = hour >= 12); send() }
+            }
+            Text(":", Modifier.padding(horizontal = 2.dp), fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            LoopWheel(60, 0, minute, { "%02d".format(it) }) { minute = it; send() }
+            if (!h24) {
+                LoopWheel(2, 0, if (hour >= 12) 1 else 0, { if (it == 0) "AM" else "PM" }, loops = false) { pm ->
+                    hour = hourOf(if (hour % 12 == 0) 12 else hour % 12, pm = pm == 1)
+                    send()
+                }
+            }
+        }
+    }
+}
+
+/** The hour of the day, 0 to 23, for [twelve] o'clock (1 to 12) in the morning or, with [pm], after noon. */
+internal fun hourOf(twelve: Int, pm: Boolean): Int = twelve % 12 + if (pm) 12 else 0
+
+/** One column of [TimeWheels]: [count] values from [first], round and round unless [loops] is false. */
+@Composable
+private fun LoopWheel(count: Int, first: Int, selected: Int, label: (Int) -> String, loops: Boolean = true, onChange: (Int) -> Unit) {
+    val copies = if (loops) TIME_LOOPS else 1
+    val state = rememberLazyListState(count * (copies / 2) + (selected - first))
+    val scope = rememberCoroutineScope()
+    val tick = rememberHaptic(android.view.HapticFeedbackConstants.CLOCK_TICK)
+    val middle by remember {
+        derivedStateOf {
+            val layout = state.layoutInfo
+            val centre = (layout.viewportStartOffset + layout.viewportEndOffset) / 2
+            layout.visibleItemsInfo.minByOrNull { abs(it.offset + it.size / 2 - centre) }?.index ?: state.firstVisibleItemIndex
+        }
+    }
+    LaunchedEffect(state) {
+        var last = -1
+        snapshotFlow { middle }.collect {
+            if (last != -1 && it != last) {
+                tick()
+                onChange(first + it % count)
+            }
+            last = it
+        }
+    }
+    LazyColumn(
+        Modifier.width(56.dp).height(TIME_ROW * TIME_ROWS_SHOWN),
+        state = state,
+        contentPadding = PaddingValues(vertical = TIME_ROW * (TIME_ROWS_SHOWN / 2)),
+        flingBehavior = rememberSnapFlingBehavior(state),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        items(count * copies) { index ->
+            val chosen = index == middle
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(TIME_ROW)
+                    .clickable { scope.launch { state.animateScrollToItem(index) } },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    label(first + index % count),
+                    color = if (chosen) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                    fontSize = if (chosen) 22.sp else 15.sp,
+                    fontWeight = if (chosen) FontWeight.SemiBold else FontWeight.Normal,
+                )
+            }
+        }
     }
 }
 

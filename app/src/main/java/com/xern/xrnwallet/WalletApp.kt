@@ -30,6 +30,8 @@ class WalletApp : Application() {
     @OptIn(FlowPreview::class)
     override fun onCreate() {
         super.onCreate()
+        // Widgets draw times too, sometimes before any page has opened.
+        com.xern.xrnwallet.domain.Dates.use24Hour = android.text.format.DateFormat.is24HourFormat(this)
         scope.launch {
             repository.seedIfEmpty()
             repository.runRecurring()

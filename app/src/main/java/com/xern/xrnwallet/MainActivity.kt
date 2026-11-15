@@ -57,6 +57,7 @@ class MainActivity : FragmentActivity() {
 
     override fun onStart() {
         super.onStart()
+        com.xern.xrnwallet.domain.Dates.use24Hour = android.text.format.DateFormat.is24HourFormat(this)
         if (stoppedAt != 0L && SystemClock.elapsedRealtime() - stoppedAt > RELOCK_AFTER_MILLIS) locked = true
     }
 

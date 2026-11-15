@@ -1,7 +1,16 @@
 package com.xern.xrnwallet.ui
 
+import androidx.compose.material3.ripple
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.Image
 import android.view.HapticFeedbackConstants
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.composed
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -243,9 +252,17 @@ fun SwitchRow(title: String, checked: Boolean, subtitle: String? = null, onChang
     }
 }
 
-/** Draws a stored icon: the app's artwork when it has a drawing, otherwise the text itself. */
+/**
+ * Draws a stored icon: its colour drawing, else the app's symbol for it, else the text itself. A
+ * colour drawing keeps its own colours, so [tint] only applies to symbols.
+ */
 @Composable
 fun Glyph(icon: String, size: Dp, tint: Color? = null) {
+    val drawing = Art.drawable(icon)
+    if (drawing != null) {
+        Image(painterResource(drawing), null, Modifier.size(size))
+        return
+    }
     val vector = Art.vector(icon)
     if (vector != null) {
         Icon(vector, null, Modifier.size(size), tint = tint ?: Art.tint(icon) ?: LocalContentColor.current)
@@ -259,14 +276,27 @@ fun Glyph(icon: String, size: Dp, tint: Color? = null) {
 fun softTint(icon: String): Color =
     Art.tint(icon)?.copy(alpha = 0.16f) ?: MaterialTheme.colorScheme.surfaceVariant
 
-/** An icon in a circle. An account passes its own [background], and its drawing turns white to suit. */
+/**
+ * What a category's circle is filled with. A colour drawing sits on plain grey, as it brings its own
+ * colour, and a mostly dark one on a lighter grey in the dark theme so it doesn't sink into it. A
+ * symbol gets its own colour, faintly.
+ */
+@Composable
+fun bubbleColour(icon: String): Color = when {
+    Art.drawable(icon) == null -> softTint(icon)
+    Art.isDark(icon) && MaterialTheme.colorScheme.surface.luminance() < 0.5f -> Color(0xFF5A5A61)
+    else -> MaterialTheme.colorScheme.surfaceVariant
+}
+
+/** An icon in a circle. An account passes its own [background], and a symbol on it turns white to suit. */
 @Composable
 fun Bubble(icon: String, size: Dp = 56.dp, background: Color? = null) {
+    val colour = Art.drawable(icon) != null
     Box(
-        Modifier.size(size).clip(CircleShape).background(background ?: softTint(icon)),
+        Modifier.size(size).clip(CircleShape).background(background ?: bubbleColour(icon)),
         contentAlignment = Alignment.Center,
     ) {
-        Glyph(icon, size * 0.56f, if (background != null) Color.White else null)
+        Glyph(icon, size * if (colour) 0.6f else 0.56f, if (background != null) Color.White else null)
     }
 }
 
@@ -328,13 +358,18 @@ fun UnderlineTabs(tabs: List<String>, selected: Int, modifier: Modifier = Modifi
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(label, style = MaterialTheme.typography.titleMedium, maxLines = 1)
+                val width by animateDpAsState(
+                    if (index == selected) 44.dp else 0.dp,
+                    spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMediumLow),
+                    label = "underline",
+                )
                 Box(
                     Modifier
                         .padding(top = 3.dp)
-                        .width(44.dp)
+                        .width(width)
                         .height(4.dp)
                         .clip(RoundedCornerShape(2.dp))
-                        .background(if (index == selected) MaterialTheme.colorScheme.primary else Color.Transparent),
+                        .background(MaterialTheme.colorScheme.primary),
                 )
             }
         }
@@ -379,10 +414,12 @@ fun EmptyNote(text: String, modifier: Modifier = Modifier) {
 fun BillRow(bill: Bill, snapshot: Snapshot, showDate: Boolean = false, showAccount: Boolean? = null, rank: Int? = null, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
     val settings = prefs()
     val f = fmt()
+    val source = remember { MutableInteractionSource() }
     Row(
         Modifier
             .fillMaxWidth()
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .springPress(source, depth = 0.97f)
+            .combinedClickable(source, ripple(), onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -516,17 +553,35 @@ fun UndoBar(undo: BillUndo, modifier: Modifier = Modifier) {
 
 /** A small buzz, because a gesture has no button to show it worked. Follows the Haptic feedback setting. */
 @Composable
-fun rememberTick(): () -> Unit {
+fun rememberTick(): () -> Unit = rememberHaptic(HapticFeedbackConstants.CONTEXT_CLICK)
+
+/** A buzz of the [kind] given (a HapticFeedbackConstants value), only while haptic feedback is on. */
+@Composable
+fun rememberHaptic(kind: Int): () -> Unit {
     val view = LocalView.current
     val on = prefs().hapticsOn
-    return remember(view, on) { { if (on) view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK) } }
+    return remember(view, on, kind) { { if (on) view.performHapticFeedback(kind) } }
 }
 
-/** Keys and buttons sink slightly under a finger. */
+/**
+ * Keys and buttons sink under a finger and spring back with a little bounce, so a press is felt as
+ * well as seen. A spring rather than a fixed-length fade: a quick tap still dips, and the way back
+ * overshoots slightly before it settles.
+ */
 @Composable
-fun pressedScale(source: InteractionSource): Float {
+fun pressedScale(source: InteractionSource, depth: Float = 0.92f): Float {
     val pressed by source.collectIsPressedAsState()
-    return animateFloatAsState(if (pressed) 0.94f else 1f, tween(90), label = "press").value
+    return animateFloatAsState(
+        if (pressed) depth else 1f,
+        if (pressed) spring(dampingRatio = 1f, stiffness = Spring.StiffnessHigh) else spring(dampingRatio = 0.45f, stiffness = Spring.StiffnessMedium),
+        label = "press",
+    ).value
+}
+
+/** [pressedScale] as a modifier, with the [source] the clickable beside it uses. */
+fun Modifier.springPress(source: InteractionSource, depth: Float = 0.92f): Modifier = composed {
+    val scale = pressedScale(source, depth)
+    graphicsLayer { scaleX = scale; scaleY = scale }
 }
 
 private val DeleteRed = Color(0xFFE5342B)

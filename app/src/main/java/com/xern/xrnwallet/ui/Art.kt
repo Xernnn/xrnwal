@@ -336,11 +336,18 @@ import androidx.compose.ui.graphics.vector.ImageVector
  * The app's category and account artwork.
  *
  * An icon is stored as a plain string, so bills, backups and sync need no special handling. An emoji
- * on its own means the Style 1 drawing of that subject, "s2:" to "s4:" in front of it means another
+ * on its own means the Style 1 drawing of that subject, "s2:" to "s5:" in front of it means another
  * drawing style, and "e:" keeps the emoji itself. A string with no drawing shows as text.
+ *
+ * Style 1 is a full-colour drawing (Fluent Emoji, see FluentArt.kt), which every icon stored before
+ * there were colour drawings now shows. The solid symbol it used to be is Style 5, and an emoji with
+ * no colour drawing still shows that.
  */
 object Art {
-    const val STYLES = 4
+    const val STYLES = 5
+
+    /** The picker's names for the styles, then the emoji tab. */
+    val tabNames = listOf("Colour", "Line", "Duo", "Round", "Solid", "Emoji")
     private const val EMOJI = "e:"
 
     private fun subject(icon: String): String =
@@ -357,6 +364,14 @@ object Art {
     /** The text to show when [icon] has no drawing. */
     fun text(icon: String): String = icon.removePrefix(EMOJI)
 
+    /** The colour drawing for a Style 1 icon, when there is one. */
+    fun drawable(icon: String): Int? =
+        if (isEmoji(icon) || style(icon) != 1) null else fluentDrawables[subject(icon)]
+
+    /** A colour drawing that's mostly dark, which needs a lighter circle on a dark page. */
+    fun isDark(icon: String): Boolean = drawable(icon) != null && subject(icon) in fluentDark
+
+    /** The symbol for [icon]: its style's, or the solid one for Style 1 and Style 5. */
     fun vector(icon: String): ImageVector? {
         if (isEmoji(icon)) return null
         val set = when (style(icon)) {

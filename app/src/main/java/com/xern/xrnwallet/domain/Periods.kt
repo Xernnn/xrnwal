@@ -126,7 +126,13 @@ sealed interface Period {
 object Dates {
     private val dayHeader = DateTimeFormatter.ofPattern("MMM d EEE", Locale.ENGLISH)
     private val shortDate = DateTimeFormatter.ofPattern("MMM d", Locale.ENGLISH)
-    private val time = DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH)
+    private val time12 = DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH)
+    private val time24 = DateTimeFormatter.ofPattern("HH:mm", Locale.ENGLISH)
+
+    /** Whether times read 16:00 and 09:00 rather than 4:00 PM and 9:00 AM: the phone's own setting, read as the app starts and resumes. */
+    @Volatile var use24Hour: Boolean = false
+
+    private val time: DateTimeFormatter get() = if (use24Hour) time24 else time12
     private val iso = DateTimeFormatter.ISO_LOCAL_DATE
 
     fun dayHeader(date: LocalDate): String = date.format(dayHeader)
