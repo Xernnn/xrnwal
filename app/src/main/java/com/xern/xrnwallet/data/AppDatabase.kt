@@ -30,6 +30,7 @@ interface AppDao {
     @Query("SELECT * FROM ChecklistItem ORDER BY sort, id") fun checklistItems(): Flow<List<ChecklistItem>>
     @Query("SELECT * FROM Reminder ORDER BY id") fun reminders(): Flow<List<Reminder>>
     @Query("SELECT * FROM CurrencyRate ORDER BY sort, code") fun rates(): Flow<List<CurrencyRate>>
+    @Query("SELECT * FROM BalanceAdjustment ORDER BY atMillis DESC, id DESC") fun adjustments(): Flow<List<BalanceAdjustment>>
 
     @Query("SELECT * FROM Recurring") suspend fun recurringNow(): List<Recurring>
     @Query("SELECT * FROM Reminder") suspend fun remindersNow(): List<Reminder>
@@ -45,6 +46,7 @@ interface AppDao {
     @Query("SELECT * FROM SavingsDeposit") suspend fun depositsNow(): List<SavingsDeposit>
     @Query("SELECT * FROM Checklist") suspend fun checklistsNow(): List<Checklist>
     @Query("SELECT * FROM ChecklistItem") suspend fun checklistItemsNow(): List<ChecklistItem>
+    @Query("SELECT * FROM BalanceAdjustment") suspend fun adjustmentsNow(): List<BalanceAdjustment>
     @Query("SELECT COUNT(*) FROM Ledger") suspend fun ledgerCount(): Int
 
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun put(value: Ledger): Long
@@ -60,6 +62,7 @@ interface AppDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun put(value: ChecklistItem): Long
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun put(value: Reminder): Long
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun put(value: CurrencyRate)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun put(value: BalanceAdjustment): Long
 
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putBillTags(values: List<BillTag>)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putBills(values: List<Bill>)
@@ -75,6 +78,7 @@ interface AppDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putChecklists(values: List<Checklist>)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putChecklistItems(values: List<ChecklistItem>)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putReminders(values: List<Reminder>)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putAdjustments(values: List<BalanceAdjustment>)
 
     @Delete suspend fun delete(value: Ledger)
     @Delete suspend fun delete(value: Account)
@@ -90,6 +94,7 @@ interface AppDao {
     @Delete suspend fun delete(value: ChecklistItem)
     @Delete suspend fun delete(value: Reminder)
     @Delete suspend fun delete(value: CurrencyRate)
+    @Delete suspend fun delete(value: BalanceAdjustment)
 
     @Query("DELETE FROM Bill WHERE id = :id") suspend fun deleteBill(id: Long)
     @Query("DELETE FROM Category WHERE id = :id OR parentId = :id") suspend fun deleteCategory(id: Long)
@@ -102,6 +107,7 @@ interface AppDao {
     @Query("DELETE FROM Budget WHERE categoryId = :categoryId") suspend fun deleteCategoryBudget(categoryId: Long)
     @Query("DELETE FROM ChecklistItem WHERE checklistId = :id") suspend fun deleteItemsOf(id: Long)
     @Query("DELETE FROM SavingsDeposit WHERE planId = :id") suspend fun deleteDepositsOf(id: Long)
+    @Query("DELETE FROM BalanceAdjustment WHERE accountId = :id") suspend fun deleteAdjustmentsOf(id: Long)
     @Query("UPDATE Bill SET accountId = NULL WHERE accountId = :id") suspend fun detachAccount(id: Long)
     @Query("UPDATE Bill SET toAccountId = NULL WHERE toAccountId = :id") suspend fun detachToAccount(id: Long)
 
@@ -119,6 +125,7 @@ interface AppDao {
     @Query("DELETE FROM ChecklistItem") suspend fun clearChecklistItems()
     @Query("DELETE FROM Reminder") suspend fun clearReminders()
     @Query("DELETE FROM CurrencyRate") suspend fun clearRates()
+    @Query("DELETE FROM BalanceAdjustment") suspend fun clearAdjustments()
 
     /** An account, with the bills whose fixed amounts were re-expressed for a change of its currency. */
     @Transaction
@@ -131,7 +138,7 @@ interface AppDao {
     suspend fun clearEverything() {
         clearBillTags(); clearBills(); clearLedgers(); clearAccounts(); clearCategories(); clearTags()
         clearBudgets(); clearRecurring(); clearDeposits(); clearPlans(); clearChecklistItems()
-        clearChecklists(); clearReminders(); clearRates()
+        clearChecklists(); clearReminders(); clearRates(); clearAdjustments()
     }
 }
 
@@ -139,9 +146,9 @@ interface AppDao {
     entities = [
         Ledger::class, Account::class, Category::class, Tag::class, Bill::class, BillTag::class,
         Budget::class, Recurring::class, SavingsPlan::class, SavingsDeposit::class, Checklist::class,
-        ChecklistItem::class, Reminder::class, CurrencyRate::class,
+        ChecklistItem::class, Reminder::class, CurrencyRate::class, BalanceAdjustment::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -150,7 +157,7 @@ abstract class AppDatabase : RoomDatabase() {
     companion object {
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "wallet.db")
-                .addMigrations(ADD_RECURRING_OPTIONS)
+                .addMigrations(ADD_RECURRING_OPTIONS, ADD_BALANCE_ADJUSTMENTS)
                 .build()
 
         /** Version 2 gives recurring rules an interval, a budget switch and tags. */
@@ -159,6 +166,18 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE Recurring ADD COLUMN every INTEGER NOT NULL DEFAULT 1")
                 db.execSQL("ALTER TABLE Recurring ADD COLUMN inBudget INTEGER NOT NULL DEFAULT 1")
                 db.execSQL("ALTER TABLE Recurring ADD COLUMN tagIds TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        /** Version 3 keeps corrections of account balances. Nothing already there changes. */
+        val ADD_BALANCE_ADJUSTMENTS = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `BalanceAdjustment` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`accountId` INTEGER NOT NULL, `atMillis` INTEGER NOT NULL, `beforeCents` INTEGER NOT NULL, " +
+                        "`afterCents` INTEGER NOT NULL)",
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_BalanceAdjustment_accountId` ON `BalanceAdjustment` (`accountId`)")
             }
         }
     }

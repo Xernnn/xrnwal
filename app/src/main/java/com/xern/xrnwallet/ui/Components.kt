@@ -4,6 +4,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.material.icons.filled.KeyboardDoubleArrowDown
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material3.ripple
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.animation.core.animateDpAsState
@@ -86,6 +87,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.zIndex
 import androidx.navigation.NavHostController
+import com.xern.xrnwallet.data.BalanceAdjustment
 import com.xern.xrnwallet.data.Bill
 import com.xern.xrnwallet.data.BillType
 import com.xern.xrnwallet.data.Repository
@@ -502,6 +504,56 @@ fun BillRow(bill: Bill, snapshot: Snapshot, showDate: Boolean = false, showAccou
     }
 }
 
+/**
+ * A correction of an account's balance among its bills, as the reference shows one: the account with a
+ * small up-and-down mark, the balance it was set to, and the difference in the colour of income or of
+ * an expense, though it is neither.
+ */
+@Composable
+fun AdjustmentRow(adjustment: BalanceAdjustment, snapshot: Snapshot, onClick: () -> Unit) {
+    val f = fmt()
+    val account = snapshot.accountById[adjustment.accountId]
+    val currency = account?.currency ?: f.base
+    val source = remember { MutableInteractionSource() }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .springPress(source, depth = 0.97f)
+            .clickable(source, ripple(), onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box {
+            if (account != null) AccountBubble(account.name, account.icon, account.color, 50.dp) else Bubble("💳", 50.dp)
+            Box(
+                Modifier
+                    .align(Alignment.TopStart)
+                    .size(19.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary),
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icons.Filled.SwapVert, null, Modifier.size(14.dp), tint = Color.Black) }
+        }
+        Column(Modifier.padding(start = 14.dp).weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(account?.name?.trim() ?: "No account", style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Muted("After adjust: ${f.plain(adjustment.afterCents)}", maxLines = 1)
+        }
+        Column(
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(3.dp),
+            modifier = Modifier.padding(start = 12.dp),
+        ) {
+            val difference = adjustment.differenceCents
+            Text(
+                f.signed(difference, currency),
+                color = if (difference < 0) f.expenseColor else f.incomeColor,
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Muted(Dates.time(adjustment.dateTime))
+        }
+    }
+}
+
 @Composable
 fun TagChip(name: String, color: Color) {
     Box(
@@ -638,7 +690,17 @@ private fun ActionBillRow(bill: Bill, snapshot: Snapshot, showAccount: Boolean?,
 
 /** Bills grouped into day cards, newest first. */
 @Composable
-fun BillDays(bills: List<Bill>, snapshot: Snapshot, showAccount: Boolean? = null, onOpen: (Bill) -> Unit) {
+fun BillDays(
+    bills: List<Bill>,
+    snapshot: Snapshot,
+    showAccount: Boolean? = null,
+    adjustments: List<BalanceAdjustment> = emptyList(),
+    onOpen: (Bill) -> Unit,
+) {
+    if (adjustments.isNotEmpty()) {
+        BillAndAdjustmentDays(bills, adjustments, snapshot, showAccount, onOpen)
+        return
+    }
     bills.groupBy { it.date }.forEach { (date, group) ->
         Column {
             DayHeader(date, group)
@@ -646,6 +708,43 @@ fun BillDays(bills: List<Bill>, snapshot: Snapshot, showAccount: Boolean? = null
                 group.forEachIndexed { index, bill ->
                     if (index > 0) HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
                     key(bill.id) { ActionBillRow(bill, snapshot, showAccount, onOpen) }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * An account's bills with its balance corrections among them by time, newest day first. A day's totals
+ * leave the corrections out, as the reference's do: they are neither spending nor income.
+ */
+@Composable
+private fun BillAndAdjustmentDays(
+    bills: List<Bill>,
+    adjustments: List<BalanceAdjustment>,
+    snapshot: Snapshot,
+    showAccount: Boolean?,
+    onOpen: (Bill) -> Unit,
+) {
+    val nav = LocalNav.current
+    val billDays = bills.groupBy { it.date }
+    val adjustmentDays = adjustments.groupBy { it.date }
+    (billDays.keys + adjustmentDays.keys).sortedDescending().forEach { date ->
+        val group = billDays[date].orEmpty()
+        val rows = (group.map { it.atMillis to it } + adjustmentDays[date].orEmpty().map { it.atMillis to it })
+            .sortedByDescending { it.first }
+            .map { it.second }
+        Column {
+            DayHeader(date, group)
+            Panel {
+                rows.forEachIndexed { index, row ->
+                    if (index > 0) HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
+                    when (row) {
+                        is Bill -> key(row.id) { ActionBillRow(row, snapshot, showAccount, onOpen) }
+                        is BalanceAdjustment -> key("adjustment-${row.id}") {
+                            AdjustmentRow(row, snapshot) { nav.navigate("adjustment/${row.id}") }
+                        }
+                    }
                 }
             }
         }

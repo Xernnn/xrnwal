@@ -29,6 +29,7 @@ data class Snapshot(
     val reminders: List<Reminder> = emptyList(),
     val rates: List<CurrencyRate> = emptyList(),
     val baseCurrency: String = "AUD",
+    val adjustments: List<BalanceAdjustment> = emptyList(),
 ) {
     val categoryById = categories.associateBy { it.id }
     val accountById = accounts.associateBy { it.id }
@@ -123,15 +124,32 @@ data class Snapshot(
         return total
     }
 
-    /** What savings plans have paid into [account], their receive account, in its own currency. */
-    fun depositsInto(account: Account): Long = plans.filter { it.accountId == account.id }.sumOf { plan ->
-        val cents = deposits.filter { it.planId == plan.id }.sumOf { it.amountCents }
+    /**
+     * What savings plans have paid into [account], their receive account, in its own currency. With
+     * [afterMillis], only what was paid in after then.
+     */
+    fun depositsInto(account: Account, afterMillis: Long? = null): Long = plans.filter { it.accountId == account.id }.sumOf { plan ->
+        val cents = deposits.filter { it.planId == plan.id && (afterMillis == null || it.atMillis > afterMillis) }.sumOf { it.amountCents }
         if (plan.currency == account.currency) cents
         else Money.convert(Money.convert(cents, rate(plan.currency)), 1.0 / rate(account.currency))
     }
 
-    fun balance(account: Account): Long =
-        account.openingCents + bills.sumOf { effectOn(it, account) } + depositsInto(account)
+    /** The corrections of [accountId]'s balance, newest first. */
+    fun adjustmentsOf(accountId: Long): List<BalanceAdjustment> =
+        adjustments.filter { it.accountId == accountId }.sortedWith(compareByDescending<BalanceAdjustment> { it.atMillis }.thenByDescending { it.id })
+
+    /**
+     * The opening balance and every bill and deposit, or, once the balance has been corrected, the
+     * latest correction and only what came after it: bills dated before a correction, edited or added
+     * later, no longer move the balance, as the reference warns. A bill at the very moment of the
+     * correction was already in it.
+     */
+    fun balance(account: Account): Long {
+        val latest = adjustmentsOf(account.id).firstOrNull()
+            ?: return account.openingCents + bills.sumOf { effectOn(it, account) } + depositsInto(account)
+        return latest.afterCents + bills.filter { it.atMillis > latest.atMillis }.sumOf { effectOn(it, account) } +
+            depositsInto(account, latest.atMillis)
+    }
 
     fun balanceInBase(account: Account): Long = Money.convert(balance(account), rate(account.currency))
 

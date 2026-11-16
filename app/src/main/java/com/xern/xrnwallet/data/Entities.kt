@@ -277,6 +277,27 @@ data class SavingsDeposit(
     val atMillis: Long,
 )
 
+/**
+ * A correction of an account's balance to what it really holds, as the reference keeps one when its
+ * balance is edited: [afterCents] from [atMillis] on, where the bills had it at [beforeCents]. The
+ * balance is then the latest correction plus what came after it, so bills before it no longer move
+ * the balance; deleting the correction gives them back their say. Amounts are in the account's currency.
+ */
+@Serializable
+@Entity(indices = [Index("accountId")])
+data class BalanceAdjustment(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val accountId: Long,
+    val atMillis: Long,
+    val beforeCents: Long,
+    val afterCents: Long,
+) {
+    val differenceCents: Long get() = afterCents - beforeCents
+    val dateTime: LocalDateTime
+        get() = LocalDateTime.ofInstant(Instant.ofEpochMilli(atMillis), ZoneId.systemDefault())
+    val date: LocalDate get() = dateTime.toLocalDate()
+}
+
 @Serializable
 @Entity
 data class Checklist(
