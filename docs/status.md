@@ -44,7 +44,12 @@ Biometric unlock has not been tested, because the emulator has no enrolled finge
 
 Sync was tested from the emulator to the real server program running on the computer, over plain
 HTTP. The phone has also synced to the home server over HTTPS since 2026-11-06, and the server's log
-shows every upload accepted. Restoring a phone from that server copy hasn't been tried.
+shows every upload accepted. On 2026-11-17 the phone, on 0.4.0, was restored from it: after a
+backup file was saved, Delete all data emptied it, Data synchronization asked which copy to keep,
+and the server's brought back all 571 bills. All-time totals, 534 records, every account balance,
+net assets and November's figures matched what the phone showed before, and the server's copy was
+unchanged. The emptied phone's side was filed under Earlier copies, as 0 bills. Home came back on
+October rather than November; changing tabs doesn't do that, and it hasn't been reproduced.
 
 - Paging, on the release build on an emulator with animations on: a page following a slow drag, flicks
   over bills both ways deleting nothing, arrows adding up on quick presses, picker jumps, weeks, Reports,
@@ -155,7 +160,6 @@ the Friday before and the Monday after, without changing the setting to confirm 
   to identify the owner's own accounts, so check each brand's terms before publishing a build.
 - On gesture navigation a right swipe from the very edge of the screen is the system's Back, which
   leaves the app from Home.
-- Restoring a real phone from the home server.
 
 ## Importing from the reference app
 
