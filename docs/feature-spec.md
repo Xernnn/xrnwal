@@ -58,8 +58,9 @@ twice.
 - Photo attachment (tap the thumbnail to see it large, or remove it), note, amount with currency
   switch (billing currencies only). The amount changes in place as digits are typed, with no motion,
   and is grouped in threes as it is typed ("1.234,5+6.789"), each number of a sum on its own, as the
-  reference's is. It stays at full size until it is 111 dp wide (the reference's 277 px), then gets
-  smaller to keep that width, down to 12 sp.
+  reference's is. Full size is 24 sp, the reference's digit size ("12.345" is 180 x 47 px there). It
+  stays at full size until it is 111 dp wide (the reference's 277 px), then gets smaller to keep that
+  width, down to 12 sp.
 - Keypad: digits, decimal, backspace, + - x /, date button ("Today"), save. While a sum is pending
   the save key shows =, which evaluates.
 - Date and time picker: the month, with the time on hour and minute wheels below it in the same
