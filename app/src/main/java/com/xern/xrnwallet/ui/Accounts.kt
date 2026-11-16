@@ -7,6 +7,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddBox
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -29,6 +30,7 @@ import com.xern.xrnwallet.data.Account
 import com.xern.xrnwallet.data.AccountKind
 import com.xern.xrnwallet.data.Seed
 import com.xern.xrnwallet.domain.Calculator
+import com.xern.xrnwallet.domain.Dates
 import com.xern.xrnwallet.domain.Money
 
 @Composable
@@ -173,17 +175,29 @@ fun AccountDetailScreen(id: Long) {
                 val saved = s.depositsInto(account)
                 if (saved != 0L) ListRow("From savings plans", f.money(saved, account.currency), chevron = false)
             }
-            if (history.isEmpty()) EmptyNote("No bills on this account") else BillDays(history, s, showAccount = false) { nav.openBill(it.id) }
+            val adjustments = s.adjustmentsOf(id)
+            if (history.isEmpty() && adjustments.isEmpty()) EmptyNote("No bills on this account")
+            else BillDays(history, s, showAccount = false, adjustments = adjustments) { nav.openBill(it.id) }
         }
     }
     if (corrected) {
-        ConfirmDialog(
+        val current = s.balance(account)
+        InputDialog(
             "Balance Correction",
-            "No anomaly detected in the account balance, no correction needed",
-            confirm = "OK",
-            danger = false,
+            initial = Calculator.format(Money.fromCents(current)),
+            numeric = true,
+            placeholder = "Real balance",
+            below = { Muted(ADJUSTMENT_NOTE, Modifier.padding(top = 10.dp)) },
             onDismiss = { corrected = false },
-        ) { corrected = false }
+        ) { text ->
+            val wanted = f.parse(text, account.currency)
+            if (wanted == null) {
+                Toast.makeText(context, "Please enter an amount", Toast.LENGTH_SHORT).show()
+                return@InputDialog
+            }
+            corrected = false
+            if (wanted != current) repo.adjustBalance(account, current, wanted)
+        }
     }
     if (confirm) {
         ConfirmDialog(
@@ -214,9 +228,8 @@ fun AccountEditScreen(id: Long) {
     var color by remember { mutableLongStateOf(existing?.color ?: 0xFF3A3A3F) }
     var kind by remember { mutableIntStateOf(existing?.kind ?: AccountKind.SAVINGS) }
     var currency by remember { mutableStateOf(existing?.currency ?: settings.baseCurrency) }
-    var balance by remember {
-        mutableStateOf(existing?.let { Calculator.format(Money.fromCents(s.balance(it))) } ?: "")
-    }
+    val shownBalance = remember { existing?.let { Calculator.format(Money.fromCents(s.balance(it))) } ?: "" }
+    var balance by remember { mutableStateOf(shownBalance) }
     var note by remember { mutableStateOf(existing?.note.orEmpty()) }
     var included by remember { mutableStateOf(existing?.includeInTotal ?: true) }
     var pickCurrency by remember { mutableStateOf(false) }
@@ -265,6 +278,7 @@ fun AccountEditScreen(id: Long) {
                 WalletField(name, { name = it }, Modifier.padding(start = 12.dp).weight(1f), "Account name")
             }
             AmountField("Current balance", balance) { balance = it }
+            if (existing != null) Muted(ADJUSTMENT_NOTE, Modifier.padding(horizontal = 4.dp))
             Panel {
                 ListRow("Currency", currency) { pickCurrency = true }
                 Divider()
@@ -277,6 +291,27 @@ fun AccountEditScreen(id: Long) {
                     return@PrimaryButton
                 }
                 val wanted = f.parse(balance.ifBlank { "0" }, currency) ?: 0
+                // A changed balance on an account that has one is a correction, kept in its history as the
+                // reference keeps one, rather than a quiet change to its opening balance. A change of
+                // currency alone keeps the number shown, as before.
+                if (existing != null && currency == existing.currency) {
+                    val current = s.balance(existing)
+                    if (balance != shownBalance && wanted != current) repo.adjustBalance(existing, current, wanted)
+                    repo.save {
+                        put(
+                            existing.copy(
+                                name = name.trim(),
+                                kind = kind,
+                                icon = icon,
+                                color = color,
+                                note = note.trim(),
+                                includeInTotal = included,
+                            ),
+                        )
+                    }
+                    nav.leavePage()
+                    return@PrimaryButton
+                }
                 val base = existing ?: Account(name = name.trim(), sort = s.accounts.size)
                 // What bills fixed in its old currency put there is re-expressed in the new one.
                 val refixed = existing?.let { s.fixedAmountsIn(it, currency) }.orEmpty().associateBy { it.id }
@@ -313,3 +348,64 @@ fun AccountEditScreen(id: Long) {
         }
     }
 }
+
+/** A balance correction, as the reference's Details page shows one: what it was and what it became. */
+@Composable
+fun AdjustmentScreen(id: Long) {
+    val s = snap()
+    val f = fmt()
+    val nav = LocalNav.current
+    val repo = LocalRepo.current
+    var confirm by remember { mutableStateOf(false) }
+    val adjustment = s.adjustments.firstOrNull { it.id == id }
+    if (adjustment == null) {
+        Page("Details") { EmptyNote("This correction no longer exists") }
+        return
+    }
+    val account = s.accountById[adjustment.accountId]
+    val currency = account?.currency ?: f.base
+    val difference = adjustment.differenceCents
+    Page("Details") {
+        ScrollBody {
+            Panel {
+                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (account != null) AccountBubble(account.name, account.icon, account.color, 50.dp)
+                    Text(
+                        account?.name?.trim() ?: "No account",
+                        Modifier.padding(start = 14.dp).weight(1f),
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        f.signed(difference, currency),
+                        color = if (difference < 0) f.expenseColor else f.incomeColor,
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                }
+                Divider()
+                ListRow("Before adjust", f.money(adjustment.beforeCents, currency), chevron = false)
+                ListRow("After adjust", f.money(adjustment.afterCents, currency), chevron = false)
+                ListRow("Date", Dates.full(adjustment.dateTime), chevron = false)
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                IconButton({ confirm = true }) { Icon(Icons.Filled.Delete, "Delete", tint = Color(0xFFFF3B30)) }
+            }
+        }
+    }
+    if (confirm) {
+        ConfirmDialog(
+            "Delete this correction?",
+            "The balance goes back to what it was without it.",
+            onDismiss = { confirm = false },
+        ) {
+            confirm = false
+            repo.deleteAdjustment(adjustment)
+            nav.leavePage()
+        }
+    }
+}
+
+/** Said where a balance is corrected, as the reference says it the first time. */
+private const val ADJUSTMENT_NOTE =
+    "A changed balance is kept as a correction in the account's history. Bills dated before it no longer change the balance; deleting the correction undoes it."

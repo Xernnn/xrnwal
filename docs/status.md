@@ -107,6 +107,11 @@ server, was wiped, and restored them all with the same totals.
 - A currency cannot be removed while an account, savings plan or recurring rule uses it, because
   each unit would then count as one of the base currency. For the same reason an account can only
   be given the base or a billing currency. The reference's behaviour here is unknown.
+- Balance Correction in the reference checks its stored balance against the bills and says "No
+  anomaly detected" when they agree. Here a balance is always worked out from the bills, so that check
+  could never find anything. The menu item asks for the real balance instead and keeps the same
+  correction the reference keeps when its balance is edited. Corrections are in backups and the server
+  copy, but not in the CSV export, which holds bills only.
 - Filter lists open under the row of chips and push the list down, rather than covering it.
 - Profile photos are 16 emoji in a dialog, where the reference has a page of 20 illustrated ones.
 - Reminders edit the title and body directly, where the reference ticks either the preset text or

@@ -210,6 +210,7 @@ private fun NavGraphBuilder.routes() {
 
     editRoute("account/edit") { AccountEditScreen(it) }
     idRoute("account") { AccountDetailScreen(it) }
+    idRoute("adjustment") { AdjustmentScreen(it) }
 
     composable("budget") { BudgetScreen() }
     composable("savings") { SavingsScreen() }

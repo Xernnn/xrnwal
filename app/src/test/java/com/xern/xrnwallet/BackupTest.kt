@@ -1,5 +1,7 @@
 package com.xern.xrnwallet
 
+import com.xern.xrnwallet.data.BACKUP_VERSION
+import com.xern.xrnwallet.data.BalanceAdjustment
 import com.xern.xrnwallet.data.Backup
 import com.xern.xrnwallet.data.BackupReader
 import com.xern.xrnwallet.data.BillType
@@ -40,6 +42,7 @@ class BackupTest {
         plans: List<SavingsPlan> = listOf(plan),
         reminders: List<Reminder> = listOf(Reminder(id = 1, name = "Evening")),
         rates: List<CurrencyRate> = listOf(CurrencyRate("VND", 0.00006)),
+        adjustments: List<BalanceAdjustment> = emptyList(),
     ): String = json.encodeToString(
         Backup(
             settings = json.encodeToString(settings),
@@ -57,6 +60,7 @@ class BackupTest {
             checklistItems = emptyList(),
             reminders = reminders,
             rates = rates,
+            adjustments = adjustments,
         ),
     )
 
@@ -127,8 +131,20 @@ class BackupTest {
         )
         assertEquals(
             "it was made by a newer version of the app",
-            refusal(backup().replaceFirst("\"version\":1", "\"version\":2")),
+            refusal(backup().replaceFirst("\"version\":$BACKUP_VERSION", "\"version\":${BACKUP_VERSION + 1}")),
         )
+    }
+
+    @Test
+    fun balanceCorrectionsGoWithACopyAndOneMadeBeforeThemStillReads() {
+        val correction = BalanceAdjustment(id = 3, accountId = 1, atMillis = 2_000, beforeCents = 5_000, afterCents = 25_000)
+        val text = backup(adjustments = listOf(correction))
+        // An app from before them would drop them and send the copy back without, so it must refuse it.
+        assertEquals(2, BACKUP_VERSION)
+        assertEquals(listOf(correction), BackupReader.read(text).adjustments)
+        val older = text.replaceFirst("\"version\":2", "\"version\":1").replace(Regex(",\"adjustments\":\\[[^\\]]*\\]"), "")
+        assertEquals(false, "adjustments" in older)
+        assertEquals(emptyList<BalanceAdjustment>(), BackupReader.read(older).adjustments)
     }
 
     @Test

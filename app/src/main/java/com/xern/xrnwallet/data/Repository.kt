@@ -27,7 +27,7 @@ import java.time.LocalDateTime
 import java.util.Base64
 
 /** Written into every backup and server copy. Raise it when an older app couldn't read the newer shape. */
-const val BACKUP_VERSION = 1
+const val BACKUP_VERSION = 2
 
 @Serializable
 data class Backup(
@@ -49,6 +49,8 @@ data class Backup(
     val rates: List<CurrencyRate>,
     /** Base64 image data by file name, so a backup restores completely on another phone. */
     val photos: Map<String, String> = emptyMap(),
+    /** Since version 2. An older app would drop them and send the copy back without, so it refuses one. */
+    val adjustments: List<BalanceAdjustment> = emptyList(),
 )
 
 /** A backup or server copy this app can read but couldn't use. The message says why, for the owner. */
@@ -151,7 +153,7 @@ class Repository(
         val flows: List<Flow<List<*>>> = listOf(
             dao.ledgers(), dao.accounts(), dao.categories(), dao.tags(), dao.bills(), dao.billTags(),
             dao.budgets(), dao.recurring(), dao.plans(), dao.deposits(), dao.checklists(),
-            dao.checklistItems(), dao.reminders(), dao.rates(),
+            dao.checklistItems(), dao.reminders(), dao.rates(), dao.adjustments(),
         )
         val tables = combine(flows) { it.toList() }
         @Suppress("UNCHECKED_CAST")
@@ -172,6 +174,7 @@ class Repository(
                 reminders = t[12] as List<Reminder>,
                 rates = t[13] as List<CurrencyRate>,
                 baseCurrency = settings.baseCurrency,
+                adjustments = t[14] as List<BalanceAdjustment>,
             )
         }.stateIn(scope, SharingStarted.Eagerly, Snapshot())
     }
@@ -230,13 +233,22 @@ class Repository(
         store.update { if (it.activeLedger == ledger.id) it.copy(activeLedger = ALL_LEDGERS) else it }
     }
 
+    /** Its bills stay, unlinked. Its balance corrections go, as they mean nothing without it. */
     fun deleteAccount(account: Account) = launchIo {
         db.withTransaction {
             dao.detachAccount(account.id)
             dao.detachToAccount(account.id)
+            dao.deleteAdjustmentsOf(account.id)
             dao.delete(account)
         }
     }
+
+    /** Records that [account] really holds [afterCents] now, where the bills give [beforeCents]. */
+    fun adjustBalance(account: Account, beforeCents: Long, afterCents: Long) = launchIo {
+        dao.put(BalanceAdjustment(accountId = account.id, atMillis = System.currentTimeMillis(), beforeCents = beforeCents, afterCents = afterCents))
+    }
+
+    fun deleteAdjustment(adjustment: BalanceAdjustment) = launchIo { dao.delete(adjustment) }
 
     fun deleteChecklist(checklist: Checklist) = launchIo {
         db.withTransaction {
@@ -423,6 +435,7 @@ class Repository(
                 rates = dao.ratesNow(),
                 photos = bills.mapNotNull { it.photo }.map(::File).filter(File::exists)
                     .associate { it.name to encoder.encodeToString(it.readBytes()) },
+                adjustments = dao.adjustmentsNow(),
             ),
         )
     }
@@ -451,6 +464,7 @@ class Repository(
             checklistItems = dao.checklistItemsNow().sortedBy { it.id },
             reminders = dao.remindersNow().sortedBy { it.id },
             rates = dao.ratesNow().sortedBy { it.code },
+            adjustments = dao.adjustmentsNow().sortedBy { it.id },
         ),
     )
 
@@ -505,6 +519,7 @@ class Repository(
             dao.putChecklistItems(backup.checklistItems)
             dao.putReminders(backup.reminders)
             dao.putRates(backup.rates)
+            dao.putAdjustments(backup.adjustments)
             store.restore(backup.settings)
             sha256(document())
         } ?: return@withContext null

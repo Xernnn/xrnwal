@@ -1,6 +1,7 @@
 package com.xern.xrnwallet
 
 import com.xern.xrnwallet.data.Account
+import com.xern.xrnwallet.data.BalanceAdjustment
 import com.xern.xrnwallet.data.Bill
 import com.xern.xrnwallet.data.BillCsv
 import com.xern.xrnwallet.data.BillType
@@ -474,6 +475,55 @@ class DomainTest {
         assertEquals("Weekly", RepeatRule(RepeatKind.WEEKLY, 1).shortLabel)
         assertEquals("Monthly on day 5", RepeatRule(RepeatKind.MONTHLY, 5).longLabel)
         assertEquals(RepeatKind.DAILY, RepeatRule.ofWheel(1, RepeatUnit.DAYS, start).kind)
+    }
+
+    @Test
+    fun aCorrectedBalanceHoldsAgainstEarlierBillsAndDeletingItUndoesIt() {
+        val savings = Account(id = 1, name = "Savings", currency = "AUD", openingCents = 10_000)
+        val cash = Account(id = 2, name = "Cash", currency = "AUD")
+        fun bill(id: Long, at: Long, cents: Long, type: Int = BillType.EXPENSE, to: Long? = null) =
+            Bill(id = id, ledgerId = 1, type = type, accountId = 1, toAccountId = to, amountCents = cents, currency = "AUD", atMillis = at)
+        val spent = bill(1, at = 1_000, cents = 5_000)
+        val before = Snapshot(accounts = listOf(savings, cash), bills = listOf(spent))
+        assertEquals(5_000L, before.balance(savings))
+
+        // The bank says 250, where the bills say 50, as tried on the reference.
+        val correction = BalanceAdjustment(id = 1, accountId = 1, atMillis = 2_000, beforeCents = 5_000, afterCents = 25_000)
+        val corrected = before.copy(adjustments = listOf(correction))
+        assertEquals(20_000L, correction.differenceCents)
+        assertEquals(25_000L, corrected.balance(savings))
+
+        // Bills after it count. Ones before it, edited, added late or at that very moment, don't.
+        val later = bill(2, at = 3_000, cents = 1_000)
+        val moved = bill(3, at = 4_000, cents = 4_000, type = BillType.TRANSFER, to = 2)
+        val after = corrected.copy(
+            bills = listOf(
+                spent.copy(amountCents = 6_000),
+                bill(4, at = 1_500, cents = 900),
+                bill(5, at = 2_000, cents = 700),
+                later,
+                moved,
+            ),
+        )
+        assertEquals(25_000L - 1_000 - 4_000, after.balance(savings))
+        assertEquals(4_000L, after.balance(cash))
+
+        // The latest correction is the one that holds.
+        val again = BalanceAdjustment(id = 2, accountId = 1, atMillis = 3_500, beforeCents = 24_000, afterCents = 30_000)
+        assertEquals(30_000L - 4_000, after.copy(adjustments = listOf(again, correction)).balance(savings))
+        assertEquals(listOf(again, correction), after.copy(adjustments = listOf(correction, again)).adjustmentsOf(1))
+
+        // Deleting it gives every bill back its say.
+        assertEquals(10_000L - 6_000 - 900 - 700 - 1_000 - 4_000, after.copy(adjustments = emptyList()).balance(savings))
+
+        // A deposit counts only after it.
+        val plan = SavingsPlan(id = 7, name = "Trip", targetCents = 100_000, currency = "AUD", startEpochDay = 0, accountId = 1)
+        val deposits = listOf(SavingsDeposit(planId = 7, amountCents = 300, atMillis = 1_800), SavingsDeposit(planId = 7, amountCents = 200, atMillis = 2_500))
+        assertEquals(25_200L, corrected.copy(plans = listOf(plan), deposits = deposits).balance(savings))
+
+        // Neither spending nor income: the month's figures leave it out.
+        assertEquals(5_000L, corrected.bills.totals().expense)
+        assertEquals(0L, corrected.bills.totals().income)
     }
 
     @Test

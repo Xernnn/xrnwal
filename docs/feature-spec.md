@@ -103,10 +103,16 @@ Transfers appear in account history as "From >> To" and count in neither expense
   total assets.
 - Types. Savings: PayPal, Google Wallet, Amazon Pay, Cash, Apple Card, Bank Card (custom name and
   icon), Other (custom). Credit: Apple Card, Debt, Credit Card (custom), Other (custom).
-- Detail: icon, name, Included in total assets chip, Current balance, history including transfers.
-  Menu: Edit, Archive, Balance Correction, Delete.
-- Balance Correction recomputes the balance from bills and reports whether it differs ("No anomaly
-  detected in the account balance, no correction needed").
+- Detail: icon, name, Included in total assets chip, Current balance, history including transfers
+  and balance corrections. Menu: Edit, Archive, Balance Correction, Delete.
+- Correcting a balance, by changing Current balance under Edit (as in the reference) or through
+  Balance Correction, which asks for the real balance, keeps a correction in the account's history:
+  the account's icon with a small up-and-down mark, "After adjust: 250", and the difference (+$200)
+  in the income or expense colour. Its Details page shows Before adjust, After adjust and Date, with
+  a delete button. The balance is then the latest correction plus what came after it, so bills dated
+  before it no longer change the balance, as the reference warns; deleting it undoes it. A correction
+  is neither spending nor income: Home, Reports, budgets and the day's totals leave it out. Seen on
+  the reference 2026-11-17 on a test account, since deleted.
 
 ## Mine
 
