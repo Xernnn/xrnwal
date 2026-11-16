@@ -695,8 +695,9 @@ private val KEY_GAP = 6.dp
 
 // The reference's amount, measured on the phone: full size until it is 277 px wide, then smaller to stay
 // that wide (both "1.234,5+6.789" and "123.456.789.012" came out 277 px). That is 111 dp at 2.5 px per dp.
+// At full size its "12.345" is 180 x 47 px; 24 sp gives about 181 x 46 here (25 sp gave 189 x 48).
 private val AMOUNT_WIDTH = 111.dp
-private const val AMOUNT_LARGEST_SP = 25
+private const val AMOUNT_LARGEST_SP = 24
 private const val AMOUNT_SMALLEST_SP = 12
 
 /** The largest whole size from [largest] down to [smallest] that [fits], or [smallest] when none does. */
