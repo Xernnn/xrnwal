@@ -127,10 +127,14 @@ interface AppDao {
     @Query("DELETE FROM CurrencyRate") suspend fun clearRates()
     @Query("DELETE FROM BalanceAdjustment") suspend fun clearAdjustments()
 
-    /** An account, with the bills whose fixed amounts were re-expressed for a change of its currency. */
+    /**
+     * An account, with the bills whose fixed amounts were re-expressed for a change of its currency and
+     * its corrections, converted, and any new one. See [Snapshot.changeCurrency].
+     */
     @Transaction
-    suspend fun putAccount(account: Account, bills: List<Bill>) {
+    suspend fun putAccount(account: Account, bills: List<Bill>, adjustments: List<BalanceAdjustment>) {
         putBills(bills)
+        putAdjustments(adjustments)
         put(account)
     }
 

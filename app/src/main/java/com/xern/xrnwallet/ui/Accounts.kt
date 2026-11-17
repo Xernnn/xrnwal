@@ -312,15 +312,10 @@ fun AccountEditScreen(id: Long) {
                     nav.leavePage()
                     return@PrimaryButton
                 }
-                val base = existing ?: Account(name = name.trim(), sort = s.accounts.size)
-                // What bills fixed in its old currency put there is re-expressed in the new one.
-                val refixed = existing?.let { s.fixedAmountsIn(it, currency) }.orEmpty().associateBy { it.id }
-                // Measured in the currency being saved, so changing currency and balance together comes out right.
-                val movement = if (existing != null) {
-                    s.copy(bills = s.bills.map { refixed[it.id] ?: it }).balance(existing.copy(currency = currency)) - existing.openingCents
-                } else {
-                    0
-                }
+                // Measured in the currency being saved, so changing currency and balance together comes out
+                // right, corrected or not. See Snapshot.changeCurrency.
+                val change = existing?.let { s.changeCurrency(it, currency, wanted, System.currentTimeMillis()) }
+                val base = change?.account ?: Account(name = name.trim(), sort = s.accounts.size, currency = currency, openingCents = wanted)
                 repo.save {
                     putAccount(
                         base.copy(
@@ -328,12 +323,11 @@ fun AccountEditScreen(id: Long) {
                             kind = kind,
                             icon = icon,
                             color = color,
-                            currency = currency,
-                            openingCents = wanted - movement,
                             note = note.trim(),
                             includeInTotal = included,
                         ),
-                        refixed.values.toList(),
+                        change?.bills.orEmpty(),
+                        change?.adjustments.orEmpty(),
                     )
                 }
                 nav.leavePage()

@@ -562,6 +562,42 @@ class DomainTest {
     }
 
     @Test
+    fun aCorrectedAccountMovedToAnotherCurrencyReadsTheBalanceTyped() {
+        // One pound is two dollars.
+        val rates = listOf(CurrencyRate("GBP", 2.0))
+        val wallet = Account(id = 1, name = "Wallet", currency = "AUD")
+        fun bill(id: Long, at: Long, cents: Long, type: Int) =
+            Bill(id = id, ledgerId = 1, type = type, accountId = 1, amountCents = cents, currency = "AUD", atMillis = at)
+        val paid = bill(1, at = 1_000, cents = 50_000, type = BillType.INCOME)
+        val spent = bill(2, at = 3_000, cents = 10_000, type = BillType.EXPENSE)
+        val correction = BalanceAdjustment(id = 5, accountId = 1, atMillis = 2_000, beforeCents = 50_000, afterCents = 100_000)
+        val s = Snapshot(accounts = listOf(wallet), bills = listOf(paid, spent), rates = rates, baseCurrency = "AUD", adjustments = listOf(correction))
+        assertEquals(90_000L, s.balance(wallet))
+
+        fun applied(change: com.xern.xrnwallet.data.CurrencyChange) = s.copy(
+            accounts = listOf(change.account),
+            bills = s.bills.map { b -> change.bills.firstOrNull { it.id == b.id } ?: b },
+            adjustments = change.adjustments,
+        )
+
+        // $900 is £450: the correction is converted with the rest, and nothing more is needed.
+        val converted = s.changeCurrency(wallet, "GBP", wanted = 45_000, atMillis = 4_000)
+        assertEquals(45_000L, applied(converted).balance(converted.account))
+        assertEquals(listOf(correction.copy(beforeCents = 25_000, afterCents = 50_000)), converted.adjustments)
+
+        // £500 typed with the change: a new correction makes it so.
+        val typed = s.changeCurrency(wallet, "GBP", wanted = 50_000, atMillis = 4_000)
+        assertEquals(50_000L, applied(typed).balance(typed.account))
+        assertEquals(BalanceAdjustment(accountId = 1, atMillis = 4_000, beforeCents = 45_000, afterCents = 50_000), typed.adjustments.last())
+
+        // Without a correction the opening balance carries it, as before: 600 kept as £600.
+        val plain = Snapshot(accounts = listOf(wallet.copy(openingCents = 10_000)), bills = listOf(paid), rates = rates, baseCurrency = "AUD")
+        val kept = plain.changeCurrency(wallet.copy(openingCents = 10_000), "GBP", wanted = 60_000, atMillis = 4_000)
+        assertEquals(35_000L, kept.account.openingCents)
+        assertEquals(emptyList<BalanceAdjustment>(), kept.adjustments)
+    }
+
+    @Test
     fun aDepositRaisesItsReceiveAccountOnly() {
         val into = Account(id = 1, name = "Savings", currency = "AUD")
         val other = Account(id = 2, name = "Cash", currency = "AUD")

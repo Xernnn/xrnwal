@@ -108,6 +108,34 @@ data class Snapshot(
         }
     }
 
+    /**
+     * [account] moved to [currency] with a balance there of [wanted], and the rows that change with it:
+     * the bills of [fixedAmountsIn], and every correction of the account, converted at today's rates as
+     * those are. Without a correction, the opening balance is set so the balance reads [wanted]. With
+     * one, the latest correction holds the balance and the opening one counts for nothing, so a new
+     * correction at [atMillis], with id 0, makes it read [wanted] where the converted figure doesn't.
+     */
+    fun changeCurrency(account: Account, currency: String, wanted: Long, atMillis: Long): CurrencyChange {
+        val refixed = fixedAmountsIn(account, currency).associateBy { it.id }
+        val moved = copy(bills = bills.map { refixed[it.id] ?: it })
+        val corrections = adjustmentsOf(account.id)
+        if (corrections.isEmpty()) {
+            val movement = moved.balance(account.copy(currency = currency)) - account.openingCents
+            return CurrencyChange(account.copy(currency = currency, openingCents = wanted - movement), refixed.values.toList(), emptyList())
+        }
+        val factor = rate(account.currency) / rate(currency)
+        val converted = corrections.map {
+            it.copy(beforeCents = Money.convert(it.beforeCents, factor), afterCents = Money.convert(it.afterCents, factor))
+        }.reversed()
+        val changed = account.copy(currency = currency, openingCents = Money.convert(account.openingCents, factor))
+        val after = moved.copy(
+            accounts = accounts.map { if (it.id == account.id) changed else it },
+            adjustments = adjustments.filter { it.accountId != account.id } + converted,
+        )
+        val more = if (after.balance(changed) == wanted) emptyList() else listOf(after.correction(changed, wanted, atMillis))
+        return CurrencyChange(changed, refixed.values.toList(), converted + more)
+    }
+
     /** Change a single bill makes to an account, in the account's own currency. */
     fun effectOn(bill: Bill, account: Account): Long {
         var total = 0L
@@ -177,6 +205,9 @@ data class Snapshot(
     fun historyOf(accountId: Long): List<Bill> =
         bills.filter { it.accountId == accountId || it.toAccountId == accountId }
 }
+
+/** The rows [Snapshot.changeCurrency] rewrites. */
+data class CurrencyChange(val account: Account, val bills: List<Bill>, val adjustments: List<BalanceAdjustment>)
 
 data class AssetSummary(val assets: Long, val debts: Long) {
     val net: Long get() = assets + debts
