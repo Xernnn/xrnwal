@@ -111,7 +111,6 @@ fun AppIconsScreen() {
                     repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
                 }
             }
-            Muted("*After changing the app icon, the app will exit and restart.")
         }
     }
 }

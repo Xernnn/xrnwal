@@ -265,7 +265,6 @@ fun ExchangeScreen() {
         },
     ) {
         ScrollBody {
-            if (codes.size == 1) Muted("Add billing currencies in Currencies and exchange rates to convert between them.")
             codes.forEach { code ->
                 val info = Currencies.info(code)
                 Panel {
@@ -489,7 +488,7 @@ fun FilterScreen(category: Long, start: Long, end: Long, type: Int) {
                     query.text,
                     { query = query.copy(text = it) },
                     Modifier.padding(start = 8.dp).weight(1f),
-                    "Categories, amount, tags, etc., separated by ','",
+                    "Search",
                 )
             }
             Row(
@@ -622,7 +621,6 @@ fun ImportScreen() {
     var parsed by remember { mutableStateOf<ImportResult?>(null) }
     var finished by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
-    var guide by remember { mutableStateOf(false) }
     val inbox = remember { File(context.filesDir, "inbox/received.csv") }
 
     fun load(text: String?) {
@@ -645,7 +643,6 @@ fun ImportScreen() {
     Page("Import Data") {
         ScrollBody {
             PrimaryButton("Choose file", Modifier.fillMaxWidth()) { picker.launch(arrayOf("*/*")) }
-            Muted("Works with this app's CSV and the general template. Columns are found by name.")
             parsed?.let { result ->
                 val rows = result.rows
                 val noRate = BillCsv.missingRates(rows, settings.baseCurrency, s.rates.map { it.code }.toSet())
@@ -669,11 +666,7 @@ fun ImportScreen() {
                     }
                     if (noRate.isNotEmpty()) {
                         Divider()
-                        ListRow(
-                            "No exchange rate",
-                            noRate.joinToString(", "),
-                            subtitle = "Add these in Currencies and exchange rates, then come back to import",
-                        )
+                        ListRow("No exchange rate", noRate.joinToString(", "))
                     }
                 }
                 if (rows.isNotEmpty() && finished == null && noRate.isEmpty()) {
@@ -691,22 +684,8 @@ fun ImportScreen() {
             finished?.let { Panel { Text(it, Modifier.padding(16.dp)) } }
             Panel {
                 ListRow("Download general template") { template.launch("xrnwallet-template.csv") }
-                Divider()
-                ListRow("User Guide") { guide = true }
             }
         }
-    }
-    if (guide) {
-        ConfirmDialog(
-            "User Guide",
-            "Use a CSV with one bill per row and a header row. Date and Amount are required. " +
-                "Type, Category, Subcategory, Currency, Rate, Account, To Account, Fee, Ledger, Tags, Note and In Budget " +
-                "are optional. Anything not yet here, such as an account or category, is created for you. " +
-                "Importing the same file twice does not add bills twice.",
-            confirm = "OK",
-            danger = false,
-            onDismiss = { guide = false },
-        ) { guide = false }
     }
 }
 
@@ -732,13 +711,12 @@ fun BackupScreen() {
         ScrollBody {
             HomeServerSection()
             Panel {
-                ListRow("Back up to a file", subtitle = "Everything: bills, accounts, budgets, plans and settings") {
+                ListRow("Back up to a file") {
                     saver.launch("xrnwallet-backup-${LocalDate.now()}.json")
                 }
                 Divider()
-                ListRow("Restore from a file", subtitle = "Replaces everything on this phone") { opener.launch(arrayOf("*/*")) }
+                ListRow("Restore from a file") { opener.launch(arrayOf("*/*")) }
             }
-            Muted("A backup file stays wherever you put it, and holds everything but the app lock, which stays with this phone.")
         }
     }
     pendingRestore?.let { uri ->
@@ -821,7 +799,6 @@ fun CarryoverScreen() {
     Page("Balance Carryover") {
         ScrollBody {
             Panel { SwitchRow("Balance Carryover", settings.carryover) { on -> repo.store.update { it.copy(carryover = on) } } }
-            Muted("When on, the balance on the home page carries forward from earlier periods. The Calendar's balance stays within its own month.")
         }
     }
 }
@@ -841,11 +818,7 @@ fun PreferencesScreen() {
                 Divider()
                 ListRow("Thousands Separator", SeparatorStyle.entries[settings.separators].label) { dialog = "separator" }
                 Divider()
-                ListRow(
-                    "Decimal places",
-                    DecimalMode.entries[settings.decimals].label,
-                    subtitle = "Minimum number of decimal places for amount",
-                ) { dialog = "decimals" }
+                ListRow("Decimal places", DecimalMode.entries[settings.decimals].label) { dialog = "decimals" }
                 Divider()
                 ListRow(
                     "First Day of Week",
@@ -872,11 +845,7 @@ fun PreferencesScreen() {
                 Divider()
                 ListRow("Income-Expense Arrow Direction", if (settings.arrowsReversed) "Reverse" else "Default") { dialog = "arrow" }
                 Divider()
-                SwitchRow(
-                    "Include future bills",
-                    settings.includeFuture,
-                    "When enabled, the home page income, expense and budgets will include future bills",
-                ) { on -> update { it.copy(includeFuture = on) } }
+                SwitchRow("Include future bills", settings.includeFuture) { on -> update { it.copy(includeFuture = on) } }
             }
         }
     }
@@ -1067,7 +1036,7 @@ fun CurrenciesScreen() {
                 ListRow("Base currency", "${base.flag} ${base.code}") { pickBase = true }
             }
             SectionTitle("Billing currencies")
-            if (s.rates.isEmpty()) Muted("None yet. Add one to record bills in another currency.")
+            if (s.rates.isEmpty()) Muted("None yet")
             ReorderGrid(
                 items = s.rates,
                 columns = 1,
@@ -1103,12 +1072,11 @@ fun CurrenciesScreen() {
                             Text("${rate.code} ${info.symbol}", style = MaterialTheme.typography.bodyLarge)
                             Muted(info.name, maxLines = 1)
                         }
-                        Muted(rate.rate.toBigDecimal().round(java.math.MathContext(6)).stripTrailingZeros().toPlainString())
+                        Muted("${rate.rate.toBigDecimal().round(java.math.MathContext(6)).stripTrailingZeros().toPlainString()} ${settings.baseCurrency}")
                     }
                 }
                 }
             }
-            Muted("Long press to reorder. Swipe left to remove. Tap to change the rate. Rates are one unit in ${settings.baseCurrency}.")
         }
     }
     if (add) {

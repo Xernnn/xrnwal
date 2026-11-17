@@ -46,7 +46,6 @@ data class Settings(
     val arrowsReversed: Boolean = false,
     val includeFuture: Boolean = true,
     val hapticsOn: Boolean = true,
-    val gestureTipSeen: Boolean = false,
     val welcomeSeen: Boolean = false,
     val hapticStrength: Int = 1,
     val hideAmounts: Boolean = false,

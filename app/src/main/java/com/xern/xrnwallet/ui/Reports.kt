@@ -190,7 +190,7 @@ private fun ReportPage(period: Period, bills: List<Bill>, view: ReportView) {
                     SwitchPill(if (view.topLevel) "Top level category" else "All categories") { view.topLevel = !view.topLevel }
                 }
                 if (ranks.isEmpty()) {
-                    EmptyNote("Please add a bill")
+                    EmptyNote("No bills")
                 } else {
                     Pie(ranks.map { it.share.toFloat() }, Modifier.fillMaxWidth().height(230.dp))
                     val shown = if (view.expanded) ranks else ranks.take(5)

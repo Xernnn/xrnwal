@@ -18,7 +18,6 @@ import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckBoxOutlineBlank
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.Icon
@@ -132,7 +131,6 @@ private fun HomePage(period: Period, counted: List<Bill>) {
     val s = snap()
     val settings = prefs()
     val nav = LocalNav.current
-    val repo = LocalRepo.current
     val today = LocalDate.now()
     val rules = settings.periodRules
     val range = period.range(rules)
@@ -169,11 +167,6 @@ private fun HomePage(period: Period, counted: List<Bill>) {
     ) {
         item {
             SummaryCard(settings.cardStyle, totals.expense, totals.income, balance, status)
-        }
-        if (!settings.gestureTipSeen) {
-            item {
-                GestureTip { repo.store.update { it.copy(gestureTipSeen = true) } }
-            }
         }
         items(openLists, key = { "list${it.first.id}" }) { (list, open) ->
             Panel(Modifier.clickable { nav.navigate("checklist/${list.id}") }) {
@@ -402,21 +395,6 @@ fun RemainingLine(cents: Long, accent: String? = null) {
         BudgetLine("Exceeded", f.plain(-cents), valueColor = ExceededAmber)
     } else {
         BudgetLine("Remaining", f.plain(cents), accent)
-    }
-}
-
-/** Nobody finds a hidden gesture alone, so Home says what they are until it is dismissed. */
-@Composable
-private fun GestureTip(onDone: () -> Unit) {
-    Panel {
-        Row(Modifier.padding(start = 16.dp, top = 12.dp, bottom = 14.dp, end = 4.dp), verticalAlignment = Alignment.Top) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Quick tips", style = MaterialTheme.typography.titleMedium)
-                Muted("Swipe left or right to turn the page.")
-                Muted("Hold a bill to edit, repeat or delete it.")
-            }
-            IconButton(onDone) { Icon(Icons.Filled.Close, "Hide tips") }
-        }
     }
 }
 

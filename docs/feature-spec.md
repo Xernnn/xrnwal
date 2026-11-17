@@ -210,8 +210,8 @@ Start time, End time, Ledgers, Accounts, Bill type, Category, Tags, bill count, 
 
 ### Import Data
 
-Choose file, Data source (this app's CSV or the general template), Download general template, User
-Guide. A file shared to the app waits on this page until it is imported, even if the app closes
+Choose file, Data source (this app's CSV or the general template), Download general template. A file
+shared to the app waits on this page until it is imported, even if the app closes
 first. A foreign currency with no exchange rate blocks the import until a rate is added.
 
 ### Start of Month
@@ -254,7 +254,6 @@ Every gesture also has a visible way to do the same thing.
 - Hold a bill: Edit, Add again today, Delete. A swipe is never a delete, because it would catch people
   turning pages. Deleting a bill offers Undo for a few seconds, not a confirmation.
 - Hold backspace on the keypad: clear the amount.
-- Home shows a dismissible tip listing these.
 
 ### Widgets
 

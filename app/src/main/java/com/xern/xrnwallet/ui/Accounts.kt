@@ -187,7 +187,6 @@ fun AccountDetailScreen(id: Long) {
             initial = Calculator.format(Money.fromCents(current)),
             numeric = true,
             placeholder = "Real balance",
-            below = { Muted(ADJUSTMENT_NOTE, Modifier.padding(top = 10.dp)) },
             onDismiss = { corrected = false },
         ) { text ->
             val wanted = f.parse(text, account.currency)
@@ -278,7 +277,6 @@ fun AccountEditScreen(id: Long) {
                 WalletField(name, { name = it }, Modifier.padding(start = 12.dp).weight(1f), "Account name")
             }
             AmountField("Current balance", balance) { balance = it }
-            if (existing != null) Muted(ADJUSTMENT_NOTE, Modifier.padding(horizontal = 4.dp))
             Panel {
                 ListRow("Currency", currency) { pickCurrency = true }
                 Divider()
@@ -399,7 +397,3 @@ fun AdjustmentScreen(id: Long) {
         }
     }
 }
-
-/** Said where a balance is corrected, as the reference says it the first time. */
-private const val ADJUSTMENT_NOTE =
-    "A changed balance is kept as a correction in the account's history. Bills dated before it no longer change the balance; deleting the correction undoes it."

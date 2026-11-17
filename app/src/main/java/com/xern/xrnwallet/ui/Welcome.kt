@@ -31,7 +31,6 @@ import com.xern.xrnwallet.data.Snapshot
 /** One of the first things to do in the app. It ticks itself off from the data, so it can't go stale. */
 class FirstStep(
     val title: String,
-    val detail: String,
     val done: (Snapshot) -> Boolean,
     val open: (NavHostController) -> Unit,
 )
@@ -39,17 +38,14 @@ class FirstStep(
 val firstSteps = listOf(
     FirstStep(
         "Add your bank or card",
-        "Cash is already set up. Add anywhere else you keep money.",
         { it.accounts.size > 1 },
     ) { it.navigate("account/edit") },
     FirstStep(
         "Add your first bill",
-        "A bill is anything you spent or earned. Use the + button any time.",
         { it.bills.isNotEmpty() },
     ) { it.addBill() },
     FirstStep(
         "Set a budget",
-        "Optional. Choose how much to spend each month.",
         { it.budgets.isNotEmpty() },
     ) { it.navigate("budget") },
 )
@@ -89,13 +85,6 @@ fun WelcomeScreen() {
                     style = MaterialTheme.typography.headlineSmall,
                     textAlign = TextAlign.Center,
                 )
-                Text(
-                    "See where your money goes. Your records stay on this phone unless you choose to back them up.",
-                    Modifier.padding(top = 8.dp, start = 12.dp, end = 12.dp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Center,
-                )
             }
             SectionTitle("Start here")
             Panel {
@@ -106,9 +95,9 @@ fun WelcomeScreen() {
             }
             SectionTitle("Already have records?")
             Panel {
-                ListRow("Import from another app", subtitle = "Use a CSV file exported from it") { nav.navigate("import") }
+                ListRow("Import from another app") { nav.navigate("import") }
                 Divider()
-                ListRow("Restore a backup", subtitle = "From a file or your own server") { nav.navigate("sync") }
+                ListRow("Restore a backup") { nav.navigate("sync") }
             }
         }
         PrimaryButton("Get started", Modifier.fillMaxWidth().padding(16.dp)) { nav.leavePage() }
@@ -137,10 +126,7 @@ private fun StepRow(number: Int, step: FirstStep, done: Boolean, onClick: () -> 
                 Text(number.toString(), style = MaterialTheme.typography.titleMedium)
             }
         }
-        Column(Modifier.weight(1f).padding(start = 14.dp, end = 8.dp)) {
-            Text(step.title, style = MaterialTheme.typography.bodyLarge)
-            Muted(step.detail, Modifier.padding(top = 3.dp))
-        }
+        Text(step.title, Modifier.weight(1f).padding(start = 14.dp, end = 8.dp), style = MaterialTheme.typography.bodyLarge)
         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, Modifier.size(24.dp))
     }
 }

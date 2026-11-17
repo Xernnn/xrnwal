@@ -54,7 +54,6 @@ fun LedgersScreen() {
         actions = { IconButton({ nav.navigate("ledger/edit") }) { Icon(Icons.Filled.AddBox, "New ledger") } },
     ) {
         ScrollBody {
-            Muted("Long press to reorder")
             ReorderGrid(
                 items = s.ledgers,
                 columns = 2,
@@ -279,10 +278,7 @@ fun CategoriesScreen() {
     ) {
         UnderlineTabs(listOf("Expenses", "Income"), tab, onSelect = { tab = it })
         ScrollBody {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("In use ", style = MaterialTheme.typography.titleMedium)
-                Muted("(Long press to reorder)")
-            }
+            Text("In use", style = MaterialTheme.typography.titleMedium)
             ReorderGrid(
                 items = inUse,
                 columns = 4,
