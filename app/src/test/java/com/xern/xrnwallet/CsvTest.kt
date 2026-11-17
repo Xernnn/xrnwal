@@ -126,6 +126,26 @@ class CsvTest {
     }
 
     @Test
+    fun aCurrencyWithoutCentsReadsOneMarkAsThousands() {
+        val file = "Date,Amount,Currency,Fee,Type\r\n" +
+            "2026-10-01,500.000,VND,1.000,Transfer\r\n" +
+            "2026-10-02,\"1,500\",VND,0,Expense\r\n" +
+            "2026-10-03,1200000.0,VND,0,Expense\r\n" +
+            "2026-10-04,500.000,AUD,0,Expense\r\n" +
+            "2026-10-05,\"1,500\",AUD,0,Expense\r\n" +
+            "2026-10-06,\"1,500\",,0,Expense\r\n"
+        val rows = BillCsv.read(file, "VND").rows
+        // 500,000 and 1,500 dong, with a fee of 1,000; a decimal written out stays one.
+        assertEquals(listOf(50_000_000L, 150_000L, 120_000_000L), rows.take(3).map { it.cents })
+        assertEquals(100_000L, rows[0].feeCents)
+        // Dollars have cents, so a file's single mark is a decimal, as before: 500 and 1.50.
+        assertEquals(listOf(50_000L, 150L), rows.drop(3).take(2).map { it.cents })
+        // No currency given: the base's, here the dong.
+        assertEquals(150_000L, rows[5].cents)
+        assertEquals(150L, BillCsv.read(file, "AUD").rows[5].cents)
+    }
+
+    @Test
     fun columnsAreFoundByNameInAnyOrder() {
         val text = "Note,Money,Bill Date,Ledger Name\nLunch,-12.50,2026/10/04 07:30,General\nPay,650,2026/10/05,General\n"
         val rows = BillCsv.read(text, "AUD").rows

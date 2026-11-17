@@ -107,7 +107,10 @@ object BillCsv {
             fun cell(field: String) = columns[field]?.let { row.getOrNull(it) }?.trim().orEmpty()
             val line = headerIndex + index + 2
             val at = parseDate(cell("date"), if (columns["time"] == columns["date"]) "" else cell("time"))
-            val cents = Money.parse(cell("amount"))
+            val currency = cell("currency").uppercase().ifEmpty { defaultCurrency }
+            // A file doesn't say which mark is its decimal, but the row's currency says whether it has cents.
+            val wholeUnits = Money.wholeUnits(currency)
+            val cents = Money.parse(cell("amount"), wholeUnits = wholeUnits)
             if (at == null || cents == null) {
                 skipped += "Line $line: unreadable date or amount"
                 return@forEachIndexed
@@ -120,12 +123,12 @@ object BillCsv {
                 category = if (ends != null) "" else cell("category"),
                 subcategory = cell("subcategory"),
                 cents = kotlin.math.abs(cents),
-                currency = cell("currency").uppercase().ifEmpty { defaultCurrency },
+                currency = currency,
                 // Only a positive number is a rate. Zero would count the bill as nothing, and "NaN" can't be added up.
                 rate = cell("rate").replace(',', '.').toDoubleOrNull()?.takeIf { it.isFinite() && it > 0 },
                 account = cell("account").ifEmpty { ends?.first.orEmpty() },
                 toAccount = ends?.second ?: cell("toaccount"),
-                feeCents = Money.parse(cell("fee")) ?: 0,
+                feeCents = Money.parse(cell("fee"), wholeUnits = wholeUnits) ?: 0,
                 ledger = cell("ledger"),
                 tags = cell("tags").split(';', '|', '，').map { it.trim() }.filter { it.isNotEmpty() },
                 note = cell("note"),
