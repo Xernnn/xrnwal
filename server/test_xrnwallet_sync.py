@@ -311,6 +311,14 @@ class SyncServerTest(unittest.TestCase):
             s.sendall(b"GARBAGE\r\n\r\n")
             self.assertIn(b"400", s.recv(200))
 
+    def test_a_document_nested_too_deep_is_refused_with_an_answer(self):
+        # json.loads raises RecursionError, not ValueError: the handler thread died with a traceback
+        # in the log and the connection closed with no answer.
+        deep = b'{"bills":' + b"[" * 100_000 + b"]" * 100_000 + b"}"
+        status, body, _ = self.call("PUT", "/state", deep, {"If-Match": '"0"'}, raw=True)
+        self.assertEqual(status, 400)
+        self.assertEqual(self.call("GET", "/state")[2]["ETag"], '"0"')
+
     def test_the_log_shows_a_callers_control_characters_escaped(self):
         # The request line and X-Forwarded-For are the caller's. Written raw, an escape sequence
         # rewrote the terminal, and a \r started a line of its own where xrnhub reads the log.

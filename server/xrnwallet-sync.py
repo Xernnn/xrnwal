@@ -564,7 +564,7 @@ class Handler(BaseHTTPRequestHandler):
             data = json.loads(raw)
             if not isinstance(data, dict) or not isinstance(data.get("bills"), list):
                 raise ValueError
-        except ValueError:
+        except (ValueError, RecursionError):  # nested past the parser's depth: no traceback, a 400
             return self.send(400, 'body must be {"bills": [...]}')
         want = (self.headers.get("If-Match") or "").strip()
         if not want:
