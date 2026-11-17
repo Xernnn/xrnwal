@@ -598,6 +598,30 @@ class DomainTest {
     }
 
     @Test
+    fun aBillAddedAgainTodayTakesTodaysRate() {
+        // One US dollar was 1.40 last year and is 1.50 today.
+        val s = Snapshot(
+            accounts = listOf(Account(id = 1, name = "Bank", currency = "AUD")),
+            rates = listOf(CurrencyRate("USD", 1.5), CurrencyRate("EUR", 1.6)),
+            baseCurrency = "AUD",
+        )
+        val lastYear = Bill(
+            id = 9, ledgerId = 1, type = BillType.EXPENSE, accountId = 1, amountCents = 10_000, currency = "USD",
+            rate = 1.4, toAmountCents = 14_000, atMillis = 1_000, recurringId = 3,
+        )
+        val now = 2_000_000_000_000L
+        val again = s.againToday(lastYear, now)
+        assertEquals(1.5, again.rate, 0.0)
+        assertEquals(15_000L, again.toAmountCents)
+        assertEquals(15_000L, again.baseCents)
+        assertEquals(listOf(0L, now, null), listOf(again.id, again.atMillis, again.recurringId))
+        // A currency with no rate left here keeps the one it had, rather than counting one to one.
+        assertEquals(1.2, s.againToday(lastYear.copy(currency = "GBP", rate = 1.2, toAmountCents = 12_000), now).rate, 0.0)
+        // In the account's own currency nothing is fixed.
+        assertNull(s.againToday(lastYear.copy(currency = "AUD", rate = 1.0, toAmountCents = null), now).toAmountCents)
+    }
+
+    @Test
     fun aDepositRaisesItsReceiveAccountOnly() {
         val into = Account(id = 1, name = "Savings", currency = "AUD")
         val other = Account(id = 2, name = "Cash", currency = "AUD")

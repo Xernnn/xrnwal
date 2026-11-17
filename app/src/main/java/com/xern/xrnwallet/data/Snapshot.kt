@@ -97,6 +97,19 @@ data class Snapshot(
     }
 
     /**
+     * [bill] added again at [nowMillis], as a new bill: at today's rate, and with what it puts into an
+     * account in another currency fixed at today's rates, as one entered now would be. A currency with
+     * no rate here any more keeps the rate the bill had, rather than counting one to one with the base.
+     */
+    fun againToday(bill: Bill, nowMillis: Long): Bill {
+        val rate = if (bill.currency == baseCurrency) 1.0 else rateByCode[bill.currency] ?: bill.rate
+        val copy = bill.copy(
+            id = 0, atMillis = nowMillis, offsetSeconds = localOffset(nowMillis), recurringId = null, rate = rate, toAmountCents = null,
+        )
+        return copy.copy(toAmountCents = fixedAmount(copy))
+    }
+
+    /**
      * The bills whose fixed amount is in [account]'s currency, re-expressed for its change to [currency]
      * at today's rates, as the rest of its balance is. A bill in [currency] itself needs none.
      */
