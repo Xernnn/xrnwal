@@ -47,7 +47,6 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.core.content.PermissionChecker
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.xern.xrnwallet.data.BackupReader
 import com.xern.xrnwallet.data.Bill
 import com.xern.xrnwallet.data.BillCsv
 import com.xern.xrnwallet.data.BillType
@@ -722,8 +721,7 @@ fun BackupScreen() {
     val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null) {
             scope.launch {
-                val text = repo.backup()
-                withContext(Dispatchers.IO) { writeUri(context, uri, text) }
+                withContext(Dispatchers.IO) { context.contentResolver.openOutputStream(uri, "wt")?.use { repo.backup(it) } }
                 Toast.makeText(context, "Backup saved", Toast.LENGTH_SHORT).show()
             }
         }
@@ -754,9 +752,9 @@ fun BackupScreen() {
             pendingRestore = null
             scope.launch {
                 val outcome = runCatching {
-                    val text = withContext(Dispatchers.IO) { readUri(context, uri) } ?: error("unreadable")
-                    // First, so a file refused leaves the sync as it was too, with no copy to choose.
-                    withContext(Dispatchers.Default) { BackupReader.read(text) }
+                    // Checked first, so a file refused leaves the sync as it was too, with no copy to choose.
+                    val text = withContext(Dispatchers.IO) { context.contentResolver.openInputStream(uri)?.use { repo.readBackup(it) } }
+                        ?: error("unreadable")
                     // Not sent up as an edit: the server's copy can hold other phones' newer changes.
                     sync.replaceHere { repo.restore(text) }
                 }

@@ -20,6 +20,8 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.doubleOrNull
 import java.io.File
+import java.io.InputStream
+import java.io.OutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.time.LocalDate
@@ -417,10 +419,11 @@ class Repository(
         }
     }
 
-    suspend fun backup(): String = withContext(Dispatchers.IO) {
+    /** Writes a backup file to [out]: everything, photos included, a photo at a time. See [BackupFile]. */
+    suspend fun backup(out: OutputStream) = withContext(Dispatchers.IO) {
         val bills = dao.billsNow()
-        val encoder = Base64.getEncoder()
-        json.encodeToString(
+        BackupFile.write(
+            out,
             Backup(
                 settings = store.export(),
                 ledgers = dao.ledgersNow(),
@@ -437,11 +440,27 @@ class Repository(
                 checklistItems = dao.checklistItemsNow(),
                 reminders = dao.remindersNow(),
                 rates = dao.ratesNow(),
-                photos = bills.mapNotNull { it.photo }.map(::File).filter(File::exists)
-                    .associate { it.name to encoder.encodeToString(it.readBytes()) },
                 adjustments = dao.adjustmentsNow(),
             ),
+            bills.mapNotNull { it.photo }.map(::File).filter(File::exists),
         )
+    }
+
+    /** Where a backup file's photos wait between [readBackup] and [restore]. */
+    private val stagedPhotos: File get() = File(context.cacheDir, "restore-photos")
+
+    /**
+     * Reads a backup file from [input], its photos into a folder of their own, and returns the rest once
+     * [BackupReader] takes it, for [restore]. Nothing here changes; a file refused leaves nothing behind.
+     */
+    suspend fun readBackup(input: InputStream): String = withContext(Dispatchers.IO) {
+        val folder = stagedPhotos.apply { deleteRecursively(); mkdirs() }
+        try {
+            BackupFile.read(input, folder).also { BackupReader.read(it) }
+        } catch (e: Exception) {
+            folder.deleteRecursively()
+            throw e
+        }
     }
 
     /**
@@ -484,9 +503,16 @@ class Repository(
         PhotoFiles.sweep(File(context.filesDir, "photos"), dao.billsNow(), System.currentTimeMillis())
     }
 
-    /** Replaces everything with a backup file. This phone keeps its own app lock, as a file holds none. */
+    /**
+     * Replaces everything with a backup file [readBackup] read, and its photos. This phone keeps its own
+     * app lock, as a file holds none.
+     */
     suspend fun restore(text: String) {
-        replace(text, expected = null)
+        try {
+            replace(text, expected = null, staged = stagedPhotos)
+        } finally {
+            withContext(Dispatchers.IO) { stagedPhotos.deleteRecursively() }
+        }
     }
 
     /** For [SyncedWallet.replaceWith]: a server copy, which leaves the app lock out, so this phone keeps its own. */
@@ -497,13 +523,17 @@ class Repository(
      * fully parsed and checked by [BackupReader] before anything is deleted. With [expected], only
      * while the document here still hashes to it, else null with nothing replaced. The check, the
      * change and the new hash are one transaction, so a bill saved meanwhile waits for it and lands
-     * after, still to be sent.
+     * after, still to be sent. The photo files in [staged] move in first.
      */
-    private suspend fun replace(text: String, expected: String?): String? = withContext(Dispatchers.IO) {
+    private suspend fun replace(text: String, expected: String?, staged: File? = null): String? = withContext(Dispatchers.IO) {
         val backup = BackupReader.read(text)
         val decoder = Base64.getDecoder()
         val photos = backup.photos.mapValues { decoder.decode(it.value) }
         val folder = File(context.filesDir, "photos").apply { mkdirs() }
+        staged?.listFiles().orEmpty().forEach { photo ->
+            val into = File(folder, photo.name)
+            if (!photo.renameTo(into)) photo.copyTo(into, overwrite = true)
+        }
         // Names come from the file, so only the last part of each is ever used as a path.
         photos.forEach { (name, bytes) -> File(folder, File(name).name).writeBytes(bytes) }
         val hash = db.withTransaction {
