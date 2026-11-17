@@ -50,6 +50,7 @@ class SyncServerTest(unittest.TestCase):
         srv.args = type("Args", (), {"data": self.data, "users": users})()
         srv.FAIL_DELAY_S = 0
         srv.failures.clear()
+        srv.checking.clear()
         srv.pruned.clear()
         srv.auth_cache.clear()
         self.httpd = LoopbackServer(("127.0.0.1", 0), srv.Handler)
@@ -361,7 +362,7 @@ class SyncServerTest(unittest.TestCase):
             start = time.monotonic()
             status = self.call("GET", "/state", password=password, headers={"X-Forwarded-For": addr})[0]
             return status, time.monotonic() - start
-        srv.failures["203.0.113.61"] = [time.monotonic()] * srv.FAIL_LIMIT  # locked out
+        srv.failures["203.0.113.61"] = [(time.monotonic(), "owner")] * srv.FAIL_LIMIT  # locked out
         srv.FAIL_DELAY_S = 0.5
         try:
             for addr, status in (("203.0.113.60", 401), ("203.0.113.61", 429)):
@@ -397,6 +398,61 @@ class SyncServerTest(unittest.TestCase):
             srv.check_login = real
         self.assertEqual((codes.count(401), codes.count(429)), (srv.FAIL_LIMIT, tries - srv.FAIL_LIMIT))
         self.assertEqual(self.call("GET", "/state", password=RIGHT)[0], 429)
+
+    def guess_as(self, name, password, addr):
+        return self.call("GET", "/state", password=password, user=name, headers={"X-Forwarded-For": addr})[0]
+
+    def test_a_right_login_clears_only_its_own_users_mistakes(self):
+        # A login for one account wiped the whole address's count: guesses at another name from
+        # the same address started over with every login of the first.
+        addr = "203.0.113.80"
+        for _ in range(5):
+            self.assertEqual(401, self.guess_as("other", "nope", addr))
+        for _ in range(4):
+            self.assertEqual(401, self.guess_as("owner", "nope", addr))
+        srv.auth_cache.clear()
+        self.assertEqual(200, self.guess_as("owner", RIGHT, addr))  # owner's four go, other's five stay
+        for _ in range(srv.FAIL_LIMIT - 5):
+            self.assertEqual(401, self.guess_as("other", "nope", addr))
+        self.assertEqual(429, self.guess_as("other", "nope", addr))
+
+    def test_a_phone_sending_the_password_it_had_clears_nothing(self):
+        # The phone sends its password with every request. Behind the same address as a guesser
+        # (home Wi-Fi, a carrier's shared address) it cleared the guesser's count at every sync,
+        # so the guesses never ran out. A password already found right (the auth cache) is a
+        # session, not a login.
+        addr = "203.0.113.81"
+        self.assertEqual(200, self.guess_as("owner", RIGHT, addr))  # the phone, signed in
+        for _ in range(srv.FAIL_LIMIT - 1):
+            self.assertEqual(401, self.guess_as("owner", "nope", addr))
+            self.assertEqual(200, self.guess_as("owner", RIGHT, addr))  # it syncs on
+        self.assertEqual(401, self.guess_as("owner", "nope", addr))
+        self.assertEqual(429, self.guess_as("owner", "nope", addr))
+
+    def test_a_login_in_flight_is_not_a_wrong_guess(self):
+        # Counted as wrong before it was checked, a right login being checked took a place: two
+        # phones signing in at once, at an address with a few mistakes behind it, got a 429,
+        # which the app takes for a lockout.
+        addr = "203.0.113.82"
+        real = srv.check_login
+
+        def slow(header):
+            time.sleep(0.3)
+            return real(header)
+
+        with unittest.mock.patch.object(srv, "FAIL_LIMIT", 3):
+            self.assertEqual(401, self.guess_as("owner", "nope", addr))
+            self.assertEqual(401, self.guess_as("owner", "nope", addr))  # one place left
+            srv.auth_cache.clear()
+            start = threading.Barrier(2)
+
+            def login(name):
+                start.wait()
+                return self.guess_as(name, RIGHT, addr)
+
+            with unittest.mock.patch.object(srv, "check_login", slow):
+                with ThreadPoolExecutor(2) as pool:
+                    self.assertEqual([200, 200], list(pool.map(login, ("owner", "other"))))
 
     def test_users_do_not_see_each_others_copies(self):
         self.put(document("mine"), '"0"')
