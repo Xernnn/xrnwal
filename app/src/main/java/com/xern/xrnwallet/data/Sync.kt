@@ -56,6 +56,7 @@ fun failureText(status: Int): String = when {
     status == 401 -> "Wrong user name or password."
     status == 429 -> "Too many wrong passwords. Try again in 15 minutes."
     status == 404 -> "Nothing answers at that address. Check it ends in /xrnwallet."
+    status == 413 -> "Too large for the home server."
     status >= 500 -> "The home server had a problem. Try again later."
     status != 0 -> "The home server answered $status."
     else -> "Can't reach the home server. Check the phone is online."
