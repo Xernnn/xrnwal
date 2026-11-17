@@ -151,6 +151,17 @@ data class Snapshot(
             depositsInto(account, latest.atMillis)
     }
 
+    /**
+     * The correction that makes [account]'s balance read [wanted] from [atMillis] on. The balance counts
+     * bills dated after then too, such as next week's rent, so the correction records the balance at its
+     * own moment: [wanted] less what those later bills and deposits do. Before is measured the same way,
+     * so the difference is the change typed, and the balance shown right after is [wanted].
+     */
+    fun correction(account: Account, wanted: Long, atMillis: Long): BalanceAdjustment {
+        val later = bills.filter { it.atMillis > atMillis }.sumOf { effectOn(it, account) } + depositsInto(account, atMillis)
+        return BalanceAdjustment(accountId = account.id, atMillis = atMillis, beforeCents = balance(account) - later, afterCents = wanted - later)
+    }
+
     fun balanceInBase(account: Account): Long = Money.convert(balance(account), rate(account.currency))
 
     fun netAssets(): AssetSummary {

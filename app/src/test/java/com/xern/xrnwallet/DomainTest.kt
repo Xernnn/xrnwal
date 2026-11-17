@@ -527,6 +527,41 @@ class DomainTest {
     }
 
     @Test
+    fun aCorrectedBalanceReadsWhatWasTypedWithABillDatedNextWeek() {
+        val savings = Account(id = 1, name = "Savings", currency = "AUD", openingCents = 100_000)
+        val now = 1_000_000L
+        val week = 7 * 24 * 60 * 60 * 1000L
+        val bought = Bill(id = 1, ledgerId = 1, type = BillType.EXPENSE, accountId = 1, amountCents = 5_000, currency = "AUD", atMillis = now - week)
+        val rent = Bill(id = 2, ledgerId = 1, type = BillType.EXPENSE, accountId = 1, amountCents = 10_000, currency = "AUD", atMillis = now + week)
+        val s = Snapshot(accounts = listOf(savings), bills = listOf(bought, rent))
+        // 1000 - 50 - next week's 100.
+        assertEquals(85_000L, s.balance(savings))
+
+        // Typed 1000: that is what the account shows, next week's rent and all.
+        val correction = s.correction(savings, wanted = 100_000, atMillis = now)
+        val corrected = s.copy(adjustments = listOf(correction))
+        assertEquals(100_000L, corrected.balance(savings))
+        assertEquals(15_000L, correction.differenceCents)
+        // Held at its own moment, before next week's rent.
+        assertEquals(95_000L, correction.beforeCents)
+        assertEquals(110_000L, correction.afterCents)
+
+        // A bill added later, dated between the correction and the rent, still counts.
+        val coffee = Bill(id = 3, ledgerId = 1, type = BillType.EXPENSE, accountId = 1, amountCents = 500, currency = "AUD", atMillis = now + 1_000)
+        assertEquals(99_500L, corrected.copy(bills = listOf(bought, rent, coffee)).balance(savings))
+
+        // A second correction on top of the first reads as typed too.
+        val again = corrected.correction(savings, wanted = 120_000, atMillis = now + 2_000)
+        assertEquals(120_000L, corrected.copy(adjustments = listOf(correction, again)).balance(savings))
+        assertEquals(20_000L, again.differenceCents)
+
+        // With nothing dated later, it is what was typed.
+        val plain = Snapshot(accounts = listOf(savings), bills = listOf(bought)).correction(savings, wanted = 90_000, atMillis = now)
+        assertEquals(95_000L, plain.beforeCents)
+        assertEquals(90_000L, plain.afterCents)
+    }
+
+    @Test
     fun aDepositRaisesItsReceiveAccountOnly() {
         val into = Account(id = 1, name = "Savings", currency = "AUD")
         val other = Account(id = 2, name = "Cash", currency = "AUD")

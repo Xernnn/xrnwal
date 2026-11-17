@@ -196,7 +196,7 @@ fun AccountDetailScreen(id: Long) {
                 return@InputDialog
             }
             corrected = false
-            if (wanted != current) repo.adjustBalance(account, current, wanted)
+            if (wanted != current) repo.adjustBalance(s, account, wanted)
         }
     }
     if (confirm) {
@@ -296,7 +296,7 @@ fun AccountEditScreen(id: Long) {
                 // currency alone keeps the number shown, as before.
                 if (existing != null && currency == existing.currency) {
                     val current = s.balance(existing)
-                    if (balance != shownBalance && wanted != current) repo.adjustBalance(existing, current, wanted)
+                    if (balance != shownBalance && wanted != current) repo.adjustBalance(s, existing, wanted)
                     repo.save {
                         put(
                             existing.copy(

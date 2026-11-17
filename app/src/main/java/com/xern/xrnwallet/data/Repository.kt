@@ -243,9 +243,9 @@ class Repository(
         }
     }
 
-    /** Records that [account] really holds [afterCents] now, where the bills give [beforeCents]. */
-    fun adjustBalance(account: Account, beforeCents: Long, afterCents: Long) = launchIo {
-        dao.put(BalanceAdjustment(accountId = account.id, atMillis = System.currentTimeMillis(), beforeCents = beforeCents, afterCents = afterCents))
+    /** Records that [account] really holds [wanted] now, as [Snapshot.correction] in [s] works it out. */
+    fun adjustBalance(s: Snapshot, account: Account, wanted: Long) = launchIo {
+        dao.put(s.correction(account, wanted, System.currentTimeMillis()))
     }
 
     fun deleteAdjustment(adjustment: BalanceAdjustment) = launchIo { dao.delete(adjustment) }
