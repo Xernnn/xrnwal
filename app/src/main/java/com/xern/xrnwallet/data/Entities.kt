@@ -327,10 +327,20 @@ data class Reminder(
     val title: String = "Time to record your accounts",
     val body: String = "Record one now",
     val enabled: Boolean = true,
+    /**
+     * The day it counts from: a weekly one comes on its weekday, a monthly one on its day of the month.
+     * One from a copy made before it had this counts from the day it is read.
+     */
+    val startEpochDay: Long = LocalDate.now().toEpochDay(),
 ) {
+    val start: LocalDate get() = LocalDate.ofEpochDay(startEpochDay)
+
     /** As [Recurring.problem]: its next time is worked out for every reminder after a restore and each boot. */
-    fun problem(): String? =
-        if (minuteOfDay !in 0 until MINUTES_IN_DAY) "a reminder is set for minute $minuteOfDay of the day" else null
+    fun problem(): String? = when {
+        minuteOfDay !in 0 until MINUTES_IN_DAY -> "a reminder is set for minute $minuteOfDay of the day"
+        startEpochDay !in CALENDAR -> "a reminder starts on no date the calendar has"
+        else -> null
+    }
 }
 
 /** A billing currency. [rate] is one unit expressed in the base currency. */

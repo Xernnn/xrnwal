@@ -16,6 +16,7 @@ import com.xern.xrnwallet.domain.RepeatKind
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.w3c.dom.Element
 import java.io.File
@@ -126,6 +127,10 @@ class BackupTest {
             refusal(backup(reminders = listOf(Reminder(id = 1, name = "Evening", minuteOfDay = -5)))),
         )
         assertEquals(
+            "a reminder starts on no date the calendar has",
+            refusal(backup(reminders = listOf(Reminder(id = 1, name = "Evening", startEpochDay = Long.MAX_VALUE)))),
+        )
+        assertEquals(
             listOf("VND has a rate of 0.0", "VND has a rate of -1.0"),
             listOf(0.0, -1.0).map { refusal(backup(rates = listOf(CurrencyRate("VND", it)))) },
         )
@@ -140,9 +145,10 @@ class BackupTest {
         val correction = BalanceAdjustment(id = 3, accountId = 1, atMillis = 2_000, beforeCents = 5_000, afterCents = 25_000)
         val text = backup(adjustments = listOf(correction))
         // An app from before them would drop them and send the copy back without, so it must refuse it.
-        assertEquals(2, BACKUP_VERSION)
+        assertTrue(BACKUP_VERSION >= 2)
         assertEquals(listOf(correction), BackupReader.read(text).adjustments)
-        val older = text.replaceFirst("\"version\":2", "\"version\":1").replace(Regex(",\"adjustments\":\\[[^\\]]*\\]"), "")
+        val older = text.replaceFirst("\"version\":$BACKUP_VERSION", "\"version\":1").replace(Regex(",\"adjustments\":\\[[^\\]]*\\]"), "")
+        assertEquals(true, "\"version\":1" in older)
         assertEquals(false, "adjustments" in older)
         assertEquals(emptyList<BalanceAdjustment>(), BackupReader.read(older).adjustments)
     }

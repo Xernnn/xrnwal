@@ -207,7 +207,9 @@ fun ReminderEditScreen(id: Long) {
                     permission.launch(Manifest.permission.POST_NOTIFICATIONS)
                 }
                 val base = existing ?: Reminder(name = name)
-                repo.saveReminder(base.copy(name = name.trim(), minuteOfDay = minute, repeat = repeat, title = title, body = body))
+                // Set weekly or monthly today, it counts from today, as a new one does.
+                val start = if (base.repeat == repeat) base.startEpochDay else LocalDate.now().toEpochDay()
+                repo.saveReminder(base.copy(name = name.trim(), minuteOfDay = minute, repeat = repeat, title = title, body = body, startEpochDay = start))
                 nav.leavePage()
             }
         }

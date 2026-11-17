@@ -26,8 +26,11 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.util.Base64
 
-/** Written into every backup and server copy. Raise it when an older app couldn't read the newer shape. */
-const val BACKUP_VERSION = 2
+/**
+ * Written into every backup and server copy. Raise it when an older app couldn't read the newer shape,
+ * or would drop part of it and send the copy back without. 3: the day a reminder counts from.
+ */
+const val BACKUP_VERSION = 3
 
 @Serializable
 data class Backup(
@@ -271,9 +274,10 @@ class Repository(
         }
     }
 
+    /** Sets the alarm of the one saved only; the others keep theirs. */
     fun saveReminder(reminder: Reminder) = launchIo {
-        dao.put(reminder)
-        Reminders.scheduleAll(context, dao.remindersNow())
+        val id = dao.put(reminder)
+        Reminders.schedule(context, reminder.copy(id = id))
     }
 
     fun deleteReminder(reminder: Reminder) = launchIo {

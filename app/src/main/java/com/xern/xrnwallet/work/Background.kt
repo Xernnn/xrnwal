@@ -26,7 +26,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.time.LocalDateTime
+import java.time.LocalTime
+import java.time.YearMonth
 import java.time.ZoneId
+import java.time.temporal.TemporalAdjusters
 import java.util.concurrent.TimeUnit
 
 class RecurringWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
@@ -100,16 +103,21 @@ object Reminders {
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
 
+    /**
+     * When [reminder] next goes off after [now]: a weekly one on its start's weekday, a monthly one on its
+     * start's day of the month, or the month's last day when it has fewer. Worked out from the start, not
+     * from today, so setting the alarm again after a restart, a save, a restore or a sync keeps its day.
+     */
     fun next(reminder: Reminder, now: LocalDateTime): LocalDateTime {
-        var at = now.toLocalDate().atTime(reminder.minuteOfDay / 60, reminder.minuteOfDay % 60)
-        while (!at.isAfter(now)) {
-            at = when (reminder.repeat) {
-                1 -> at.plusWeeks(1)
-                2 -> at.plusMonths(1)
-                else -> at.plusDays(1)
-            }
+        val time = LocalTime.of(reminder.minuteOfDay / 60, reminder.minuteOfDay % 60)
+        val day = reminder.start.dayOfMonth
+        fun inMonth(month: YearMonth) = month.atDay(minOf(day, month.lengthOfMonth())).atTime(time)
+        return when (reminder.repeat) {
+            1 -> now.toLocalDate().with(TemporalAdjusters.nextOrSame(reminder.start.dayOfWeek)).atTime(time)
+                .let { if (it.isAfter(now)) it else it.plusWeeks(1) }
+            2 -> inMonth(YearMonth.from(now)).let { if (it.isAfter(now)) it else inMonth(YearMonth.from(now).plusMonths(1)) }
+            else -> now.toLocalDate().atTime(time).let { if (it.isAfter(now)) it else it.plusDays(1) }
         }
-        return at
     }
 
     fun schedule(context: Context, reminder: Reminder) {

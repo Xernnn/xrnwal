@@ -6,6 +6,7 @@ import com.xern.xrnwallet.data.Repository
 import com.xern.xrnwallet.data.SettingsStore
 import com.xern.xrnwallet.data.SyncManager
 import com.xern.xrnwallet.work.RecurringWorker
+import com.xern.xrnwallet.work.Reminders
 import com.xern.xrnwallet.work.WalletWidgets
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -35,6 +36,8 @@ class WalletApp : Application() {
         scope.launch {
             repository.seedIfEmpty()
             repository.runRecurring()
+            // Alarms go when the app is force-stopped, as some phones do to apps swiped away.
+            Reminders.scheduleAll(this@WalletApp, repository.dao.remindersNow())
         }
         // As the app starts, before a deleted bill's Undo can be on offer, and between syncs.
         scope.launch { sync.unlessSyncing { repository.sweepPhotos() } }
