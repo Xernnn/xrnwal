@@ -28,7 +28,8 @@ import java.util.Base64
 
 /**
  * Written into every backup and server copy. Raise it when an older app couldn't read the newer shape,
- * or would drop part of it and send the copy back without. 3: the day a reminder counts from.
+ * or would drop part of it and send the copy back without. 3: the day a reminder counts from, and the
+ * offset from UTC each bill and correction was entered at.
  */
 const val BACKUP_VERSION = 3
 
@@ -78,6 +79,9 @@ object BackupReader {
             ?: backup.reminders.firstNotNullOfOrNull { it.problem() }
             // A rate is divided by. Zero gives infinity, which the Currencies page can't show and sync can't send.
             ?: backup.rates.firstOrNull { !(it.rate.isFinite() && it.rate > 0) }?.let { "${it.code} has a rate of ${it.rate}" }
+            // Every list of bills works out their dates, which no offset beyond a zone's can give.
+            ?: backup.bills.firstNotNullOfOrNull { offsetProblem("a bill", it.offsetSeconds) }
+            ?: backup.adjustments.firstNotNullOfOrNull { offsetProblem("a balance correction", it.offsetSeconds) }
         if (problem != null) throw UnusableBackup(problem)
         return backup
     }
@@ -338,7 +342,7 @@ class Repository(
             val categories = dao.categoriesNow().toMutableList()
             val tags = dao.tagsNow().associateBy { it.name.lowercase() }.toMutableMap()
             val rates = dao.ratesNow().associateBy { it.code }.toMutableMap()
-            val existing = AlreadyStored(dao.billsNow().map { fingerprint(it.atMillis, it.amountCents, it.note, it.type) })
+            val existing = AlreadyStored(dao.billsNow().map { BillCsv.fingerprint(it.dateTime, it.amountCents, it.note, it.type) })
             val accountCurrencies = BillCsv.accountCurrencies(rows, base)
 
             suspend fun ledgerFor(name: String): Ledger {
@@ -370,7 +374,7 @@ class Repository(
             var added = 0
             for (row in rows) {
                 val millis = BillCsv.millisOf(row.at)
-                if (existing.claim(fingerprint(millis, row.cents, row.note, row.type))) continue
+                if (existing.claim(BillCsv.fingerprint(row.at, row.cents, row.note, row.type))) continue
                 val parent = if (row.type == BillType.TRANSFER) null else categoryFor(row.category, row.type, null)
                 val category = if (parent != null && row.subcategory.isNotBlank()) {
                     categoryFor(row.subcategory, row.type, parent.id)
@@ -412,10 +416,6 @@ class Repository(
             added
         }
     }
-
-    /** Whole seconds, because that is all an exported file keeps. */
-    private fun fingerprint(millis: Long, cents: Long, note: String, type: Int) =
-        "${millis / 1000}|$cents|$note|$type"
 
     suspend fun backup(): String = withContext(Dispatchers.IO) {
         val bills = dao.billsNow()

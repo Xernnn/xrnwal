@@ -92,6 +92,7 @@ import com.xern.xrnwallet.data.Bill
 import com.xern.xrnwallet.data.BillType
 import com.xern.xrnwallet.data.Repository
 import com.xern.xrnwallet.data.Snapshot
+import com.xern.xrnwallet.data.localOffset
 import com.xern.xrnwallet.data.totals
 import com.xern.xrnwallet.domain.Dates
 import java.time.LocalDate
@@ -594,7 +595,8 @@ class BillUndo(private val repo: Repository, private val scope: CoroutineScope) 
 
     fun copyToToday(bill: Bill, tagIds: List<Long>) {
         scope.launch {
-            val copy = bill.copy(id = 0, atMillis = System.currentTimeMillis(), recurringId = null)
+            val now = System.currentTimeMillis()
+            val copy = bill.copy(id = 0, atMillis = now, offsetSeconds = localOffset(now), recurringId = null)
             val id = repo.saveBill(copy, tagIds)
             offer("Added again for today") { repo.deleteBill(id) }
         }

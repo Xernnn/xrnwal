@@ -191,6 +191,12 @@ object BillCsv {
 
     fun millisOf(at: LocalDateTime): Long = at.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
 
+    /**
+     * What a bill read from a file is matched by against those stored: its date and time as entered, in
+     * whole seconds as a file keeps them, so a file written in one time zone matches in another.
+     */
+    fun fingerprint(at: LocalDateTime, cents: Long, note: String, type: Int) = "${at.withNano(0)}|$cents|$note|$type"
+
     fun bigDecimal(cents: Long): BigDecimal = Money.fromCents(cents)
 
     fun midnight(): LocalTime = LocalTime.MIDNIGHT

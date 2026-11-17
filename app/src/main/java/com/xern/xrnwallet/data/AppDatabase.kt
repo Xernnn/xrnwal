@@ -153,7 +153,7 @@ interface AppDao {
         Budget::class, Recurring::class, SavingsPlan::class, SavingsDeposit::class, Checklist::class,
         ChecklistItem::class, Reminder::class, CurrencyRate::class, BalanceAdjustment::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -162,7 +162,7 @@ abstract class AppDatabase : RoomDatabase() {
     companion object {
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "wallet.db")
-                .addMigrations(ADD_RECURRING_OPTIONS, ADD_BALANCE_ADJUSTMENTS, ADD_REMINDER_START)
+                .addMigrations(ADD_RECURRING_OPTIONS, ADD_BALANCE_ADJUSTMENTS, ADD_REMINDER_START, ADD_ENTRY_OFFSETS)
                 .build()
 
         /** Version 2 gives recurring rules an interval, a budget switch and tags. */
@@ -193,6 +193,27 @@ abstract class AppDatabase : RoomDatabase() {
         val ADD_REMINDER_START = object : Migration(3, 4) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE Reminder ADD COLUMN startEpochDay INTEGER NOT NULL DEFAULT ${LocalDate.now().toEpochDay()}")
+            }
+        }
+
+        /**
+         * Version 5 keeps the offset from UTC each bill and correction was entered at, so its date stays
+         * when the phone changes time zone. Where each was entered isn't known, so those already there take
+         * the phone's zone now, which keeps every one on the date it shows today.
+         */
+        val ADD_ENTRY_OFFSETS = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                for (table in listOf("Bill", "BalanceAdjustment")) {
+                    db.execSQL("ALTER TABLE `$table` ADD COLUMN offsetSeconds INTEGER NOT NULL DEFAULT 0")
+                    val rows = db.query("SELECT id, atMillis FROM `$table`").use { cursor ->
+                        buildList { while (cursor.moveToNext()) add(cursor.getLong(0) to cursor.getLong(1)) }
+                    }
+                    rows.groupBy({ localOffset(it.second) }, { it.first }).forEach { (offset, ids) ->
+                        ids.chunked(500).forEach { chunk ->
+                            db.execSQL("UPDATE `$table` SET offsetSeconds = $offset WHERE id IN (${chunk.joinToString(",")})")
+                        }
+                    }
+                }
             }
         }
     }
