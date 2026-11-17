@@ -447,6 +447,7 @@ private fun TagEditor(tag: Tag?, onDismiss: () -> Unit) {
     val repo = LocalRepo.current
     var name by remember { mutableStateOf(tag?.name.orEmpty()) }
     var color by remember { mutableLongStateOf(tag?.color ?: Seed.tagColors[0]) }
+    var confirm by remember { mutableStateOf(false) }
     DialogCard(onDismiss) {
         WalletField(name, { name = it }, Modifier.fillMaxWidth(), "Tag name")
         Spacer(Modifier.height(12.dp))
@@ -469,16 +470,25 @@ private fun TagEditor(tag: Tag?, onDismiss: () -> Unit) {
         }
         Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             if (tag != null) {
-                GhostButton("Delete", Modifier.weight(1f)) {
-                    repo.deleteTag(tag)
-                    onDismiss()
-                }
+                GhostButton("Delete", Modifier.weight(1f)) { confirm = true }
             }
             PrimaryButton("Save", Modifier.weight(1f), enabled = name.isNotBlank()) {
                 val base = tag ?: Tag(name = name, sort = s.tags.size)
                 repo.save { put(base.copy(name = name.trim(), color = color)) }
                 onDismiss()
             }
+        }
+    }
+    if (confirm && tag != null) {
+        val bills = s.billTags.count { it.tagId == tag.id }
+        ConfirmDialog(
+            "Delete ${tag.name}?",
+            "It comes off ${if (bills == 1) "1 bill" else "$bills bills"}. This cannot be undone.",
+            onDismiss = { confirm = false },
+        ) {
+            confirm = false
+            repo.deleteTag(tag)
+            onDismiss()
         }
     }
 }
