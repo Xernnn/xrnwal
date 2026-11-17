@@ -238,6 +238,29 @@ class SyncServerTest(unittest.TestCase):
         body = json.loads(self.call("GET", f"/versions/{oldest['id']}")[1])
         self.assertEqual(body["bills"][0]["note"], "first of the day")
 
+    def test_a_copy_replaced_after_a_rollback_stays_in_the_history(self):
+        # state.json put back by hand from the day's first copy, version 1, while the history held
+        # 5 to 24. The copy the next write replaced was filed as 1.json and, the lowest number,
+        # deleted at once; until the version passed 24, every replaced copy went the same way.
+        self.put(document("first of the day"), '"0"')
+        for i in range(1, srv.KEEP_VERSIONS + 5):
+            self.put(document(f"change {i}"), f'"{i}"')
+        history = os.path.join(self.data, "users", "owner", "history")
+        self.assertEqual(sorted(int(n[:-5]) for n in os.listdir(history)), list(range(5, 25)))
+        daily = os.path.join(self.data, "users", "owner", "daily")
+        day = os.listdir(daily)[0]
+        with open(os.path.join(daily, day), encoding="utf-8") as f:
+            first = f.read()
+        with open(os.path.join(self.data, "users", "owner", "state.json"), "w", encoding="utf-8") as f:
+            f.write(first)
+        self.assertEqual(self.put(document("after the rollback"), '"1"')[0], 200)
+        # The oldest filed goes instead: 5.json.
+        self.assertEqual(sorted(int(n[:-5]) for n in os.listdir(history)), [1] + list(range(6, 25)))
+        self.assertEqual(self.put(document("and again"), '"2"')[0], 200)
+        self.assertEqual(sorted(int(n[:-5]) for n in os.listdir(history)), [1, 2] + list(range(7, 25)))
+        body = json.loads(self.call("GET", "/versions/1")[1])
+        self.assertEqual(body["bills"][0]["note"], "first of the day")
+
     def test_no_earlier_copies_is_an_empty_list(self):
         status, body, _ = self.call("GET", "/versions")
         self.assertEqual((status, json.loads(body)), (200, []))
