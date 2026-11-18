@@ -2,7 +2,11 @@ package com.xern.xrnwallet.ui
 
 import android.content.SharedPreferences
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -11,6 +15,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.rememberNavController
 import androidx.room.Room
 import com.xern.xrnwallet.data.Account
@@ -224,3 +229,14 @@ fun AddBillLightPreview() = Frame(settings = sampleSettings.copy(themeMode = Set
 @Preview(name = "Welcome", widthDp = 393, heightDp = 873)
 @Composable
 fun WelcomePreview() = Frame(snapshot = Snapshot(ledgers = sampleSnapshot.ledgers, accounts = sampleAccounts.take(1), categories = sampleCategories)) { WelcomeScreen() }
+
+/** Every launcher colour as the family tile, to hold against docs/icon.svg. */
+@Preview(name = "App tiles", widthDp = 393, heightDp = 220)
+@Composable
+fun AppTilesPreview() = Frame {
+    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        AppIcons.choices.chunked(4).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) { row.forEach { AppTile(76.dp, choice = it) } }
+        }
+    }
+}
