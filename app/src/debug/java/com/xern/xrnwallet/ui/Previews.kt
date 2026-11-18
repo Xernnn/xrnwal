@@ -197,23 +197,23 @@ fun ReportsYearPreview() = Frame(period = Period.Year(today.year)) { ReportsScre
 @Composable
 fun ReportsCustomPreview() = Frame(period = Period.Custom(today.minusDays(89), today)) { ReportsScreen() }
 
-private val fitted = sampleSettings.copy(trendFit = true)
+private val scrolled = sampleSettings.copy(trendScroll = true)
 
-@Preview(name = "Reports month fitted", widthDp = 393, heightDp = 3000)
+@Preview(name = "Reports month scrolling", widthDp = 393, heightDp = 3000)
 @Composable
-fun ReportsMonthFitPreview() = Frame(settings = fitted, period = thisMonth) { ReportsScreen() }
+fun ReportsMonthScrollPreview() = Frame(settings = scrolled, period = thisMonth) { ReportsScreen() }
 
-@Preview(name = "Reports year fitted", widthDp = 393, heightDp = 3000)
+@Preview(name = "Reports year scrolling", widthDp = 393, heightDp = 3000)
 @Composable
-fun ReportsYearFitPreview() = Frame(settings = fitted, period = Period.Year(today.year)) { ReportsScreen() }
+fun ReportsYearScrollPreview() = Frame(settings = scrolled, period = Period.Year(today.year)) { ReportsScreen() }
 
-@Preview(name = "Reports 90 days fitted", widthDp = 393, heightDp = 3000)
+@Preview(name = "Reports 90 days scrolling", widthDp = 393, heightDp = 3000)
 @Composable
-fun ReportsCustomFitPreview() = Frame(settings = fitted, period = Period.Custom(today.minusDays(89), today)) { ReportsScreen() }
+fun ReportsCustomScrollPreview() = Frame(settings = scrolled, period = Period.Custom(today.minusDays(89), today)) { ReportsScreen() }
 
-@Preview(name = "Reports 365 days fitted", widthDp = 393, heightDp = 3000)
+@Preview(name = "Reports 365 days", widthDp = 393, heightDp = 3000)
 @Composable
-fun ReportsLongFitPreview() = Frame(settings = fitted, period = Period.Custom(today.minusDays(364), today)) { ReportsScreen() }
+fun ReportsLongPreview() = Frame(period = Period.Custom(today.minusDays(364), today)) { ReportsScreen() }
 
 @Preview(name = "Reports month light", widthDp = 393, heightDp = 3000)
 @Composable
@@ -250,6 +250,24 @@ fun TwelveMonthsPreview() = Frame { TwelveMonths(thisMonth) }
 @Preview(name = "Twelve months light", widthDp = 393, heightDp = 900)
 @Composable
 fun TwelveMonthsLightPreview() = Frame(settings = sampleSettings.copy(themeMode = Settings.THEME_LIGHT)) { TwelveMonths(thisMonth) }
+
+/** The four drawings that used to be too dark for their circle, among some ordinary ones. */
+@Composable
+private fun CategoryIcons() {
+    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        listOf(listOf("🎓", "🎵", "🐾", "🔌", "🍗"), listOf("🎬", "🎮", "📷", "🏠", "💊")).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) { row.forEach { Bubble(it, 58.dp) } }
+        }
+    }
+}
+
+@Preview(name = "Category icons", widthDp = 393, heightDp = 170)
+@Composable
+fun CategoryIconsPreview() = Frame { CategoryIcons() }
+
+@Preview(name = "Category icons light", widthDp = 393, heightDp = 170)
+@Composable
+fun CategoryIconsLightPreview() = Frame(settings = sampleSettings.copy(themeMode = Settings.THEME_LIGHT)) { CategoryIcons() }
 
 /** Every launcher colour as the family tile, to hold against docs/icon.svg. */
 @Preview(name = "App tiles", widthDp = 393, heightDp = 220)

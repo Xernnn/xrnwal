@@ -90,15 +90,19 @@ Transfers appear in account history as "From >> To" and count in neither expense
 
 - Period picker with Custom. Filter sheet: tags, ledgers, accounts; reset and confirm.
 - Trend line chart with average line. Switch Expenses/Income.
-  - Two looks, switched by the >< button beside Expenses/Income and kept across restarts: scrolling
-    sideways at 38 dp a point (the reference's), or fitted to the card, every point at once, labelled
-    on a pattern of dates that fits (1, 4, 7...; 1, 8, 15, 22; 1, 11, 21; month starts; a month's 1st
-    reads as its name). Tap a point, or hold and drag along the line, for its date and figure.
+  - Two looks, switched by the >< button beside Expenses/Income (lit when fitted) and kept across
+    restarts. It opens fitted to the card, every point at once, labelled on a pattern of dates that
+    fits (1, 4, 7...; 1, 8, 15, 22; 1, 11, 21; month starts; a month's 1st reads as its name). The
+    other look scrolls sideways at 38 dp a point, as the reference's does. Tap a point, or hold and
+    drag along the line, for its date and figure.
   - Month view: daily points. Year view: monthly points.
   - Average = total / elapsed units (days in month, months so far this year).
   - Use calendar days. The original computes days from hours, so a month containing the DST change
     comes out one day short (October 2026 divides by 30). Do not reproduce that.
 - Category ranking: pie, then ranked rows (name, %, amount, bill count, bar), top 5 with expand.
+  Categories are coloured by rank in eight hues, stepped for each theme and ordered so neighbours
+  stay apart for colour-blind eyes too; from the ninth on they're the grey of Other. A thin line of
+  the card's colour separates the slices.
   Switches: Expenses/Income, Top level category/All categories. A row opens that category's bills.
 - Bill Amount Ranking TOP 10 with Expenses/Income switch.
 
