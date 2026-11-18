@@ -1,12 +1,16 @@
 package com.xern.xrnwallet
 
+import android.content.SharedPreferences
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import com.xern.xrnwallet.data.Settings
+import com.xern.xrnwallet.data.SettingsStore
 import com.xern.xrnwallet.data.Stats
 import com.xern.xrnwallet.ui.CategoryColours
 import com.xern.xrnwallet.ui.categoryColoursDark
 import com.xern.xrnwallet.ui.categoryColoursLight
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
@@ -14,8 +18,26 @@ import kotlin.math.cbrt
 import kotlin.math.pow
 import kotlin.math.sqrt
 
-/** Reports' charts: which points of a squeezed chart are labelled, and the category colours. */
+/** Reports' charts: how the trend opens, which points of a squeezed chart are labelled, the category colours. */
 class ReportsTest {
+    private fun opened(json: String?): Settings {
+        val prefs: SharedPreferences = MemoryPrefs()
+        if (json != null) prefs.edit().putString("settings", json).apply()
+        return SettingsStore(prefs).settings.value
+    }
+
+    @Test
+    fun theTrendOpensWithEveryPointShowingUnlessScrollingWasChosen() {
+        assertFalse(opened(null).trendScroll)
+        // 0.5.2 wrote trendFit down as false whether or not anyone chose it, so it no longer counts.
+        assertFalse(opened("""{"trendFit":false}""").trendScroll)
+        assertTrue(opened("""{"trendScroll":true}""").trendScroll)
+        // A choice made now outlives a restart.
+        val prefs = MemoryPrefs()
+        SettingsStore(prefs).update { it.copy(trendScroll = true) }
+        assertTrue(SettingsStore(prefs).settings.value.trendScroll)
+    }
+
     /** OKLab lightness and the distance between two colours, x100 as the dataviz validator counts it. */
     private fun oklab(colour: Color): Triple<Double, Double, Double> {
         fun linear(c: Float) = if (c <= 0.04045f) c / 12.92 else ((c + 0.055) / 1.055).pow(2.4)

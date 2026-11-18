@@ -61,8 +61,12 @@ data class Settings(
     val unlockMisses: Int = 0,
     val lastMissAt: Long = 0,
     val ratesUpdatedAt: Long = 0,
-    /** Reports' trend chart squeezed to the card's width, rather than scrolled sideways. */
-    val trendFit: Boolean = false,
+    /**
+     * Reports' trend chart scrolled sideways, a readable width per point, rather than fitted to the
+     * card with every point showing, which it is until this is chosen. 0.5.2 kept the opposite,
+     * trendFit, and wrote it down whether or not it had been chosen, so it is read no more.
+     */
+    val trendScroll: Boolean = false,
     /** The account of the expense or income recorded last, which a new bill starts on. */
     val lastAccountId: Long? = null,
 ) {

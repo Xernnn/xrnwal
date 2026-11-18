@@ -197,23 +197,23 @@ fun ReportsYearPreview() = Frame(period = Period.Year(today.year)) { ReportsScre
 @Composable
 fun ReportsCustomPreview() = Frame(period = Period.Custom(today.minusDays(89), today)) { ReportsScreen() }
 
-private val fitted = sampleSettings.copy(trendFit = true)
+private val scrolled = sampleSettings.copy(trendScroll = true)
 
-@Preview(name = "Reports month fitted", widthDp = 393, heightDp = 3000)
+@Preview(name = "Reports month scrolling", widthDp = 393, heightDp = 3000)
 @Composable
-fun ReportsMonthFitPreview() = Frame(settings = fitted, period = thisMonth) { ReportsScreen() }
+fun ReportsMonthScrollPreview() = Frame(settings = scrolled, period = thisMonth) { ReportsScreen() }
 
-@Preview(name = "Reports year fitted", widthDp = 393, heightDp = 3000)
+@Preview(name = "Reports year scrolling", widthDp = 393, heightDp = 3000)
 @Composable
-fun ReportsYearFitPreview() = Frame(settings = fitted, period = Period.Year(today.year)) { ReportsScreen() }
+fun ReportsYearScrollPreview() = Frame(settings = scrolled, period = Period.Year(today.year)) { ReportsScreen() }
 
-@Preview(name = "Reports 90 days fitted", widthDp = 393, heightDp = 3000)
+@Preview(name = "Reports 90 days scrolling", widthDp = 393, heightDp = 3000)
 @Composable
-fun ReportsCustomFitPreview() = Frame(settings = fitted, period = Period.Custom(today.minusDays(89), today)) { ReportsScreen() }
+fun ReportsCustomScrollPreview() = Frame(settings = scrolled, period = Period.Custom(today.minusDays(89), today)) { ReportsScreen() }
 
-@Preview(name = "Reports 365 days fitted", widthDp = 393, heightDp = 3000)
+@Preview(name = "Reports 365 days", widthDp = 393, heightDp = 3000)
 @Composable
-fun ReportsLongFitPreview() = Frame(settings = fitted, period = Period.Custom(today.minusDays(364), today)) { ReportsScreen() }
+fun ReportsLongPreview() = Frame(period = Period.Custom(today.minusDays(364), today)) { ReportsScreen() }
 
 @Preview(name = "Reports month light", widthDp = 393, heightDp = 3000)
 @Composable

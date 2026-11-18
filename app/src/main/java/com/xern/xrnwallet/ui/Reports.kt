@@ -222,7 +222,7 @@ private fun ReportPage(period: Period, bills: List<Bill>, view: ReportView, budg
                         )
                         Muted("Average: ${if (total == 0L) "" else f.money(average)}", Modifier.padding(top = 2.dp))
                     }
-                    FitToggle(settings.trendFit) { repo.store.update { it.copy(trendFit = !it.trendFit) } }
+                    FitToggle(!settings.trendScroll) { repo.store.update { it.copy(trendScroll = !it.trendScroll) } }
                     SwitchPill(if (view.trendType == BillType.EXPENSE) "Expenses" else "Income") {
                         view.trendType = if (view.trendType == BillType.EXPENSE) BillType.INCOME else BillType.EXPENSE
                     }
@@ -231,7 +231,7 @@ private fun ReportPage(period: Period, bills: List<Bill>, view: ReportView, budg
                     points,
                     average.takeIf { total != 0L },
                     monthly = period is Period.Year,
-                    fit = settings.trendFit,
+                    fit = !settings.trendScroll,
                     modifier = Modifier.padding(top = 12.dp),
                 )
             }
