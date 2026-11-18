@@ -307,6 +307,26 @@ class SyncServerTest(unittest.TestCase):
         status, body, headers = self.call("GET", "/photos/a.jpg")
         self.assertEqual((status, body, headers["Content-Type"]), (200, b"\xff\xd8bytes", "image/jpeg"))
 
+    def head(self, path, login=True):
+        """The whole answer to a HEAD request, read to the end: a body sent anyway shows up in it."""
+        auth = b"Authorization: Basic " + base64.b64encode(f"owner:{RIGHT}".encode()) + b"\r\n" if login else b""
+        with socket.create_connection(("127.0.0.1", self.httpd.server_address[1]), timeout=10) as s:
+            s.sendall(b"HEAD " + path.encode() + b" HTTP/1.1\r\nHost: x\r\nConnection: close\r\n" + auth + b"\r\n")
+            return b"".join(iter(lambda: s.recv(4096), b""))
+
+    def test_head_is_a_get_without_the_body(self):
+        # curl -I got 501 "Unsupported method", which xrnhub's log page shows as an error.
+        self.put(document("a"), '"0"')
+        self.call("PUT", "/photos/a.jpg", b"\xff\xd8bytes", raw=True)
+        for path, login, status, header in (("/health", False, b"200", b"Content-Length: 2"),
+                                            ("/state", True, b"200", b'ETag: "1"'),
+                                            ("/photos/a.jpg", True, b"200", b"Content-Length: 7"),
+                                            ("/state", False, b"401", b"WWW-Authenticate")):
+            answer = self.head(path, login)
+            self.assertRegex(answer, rb"^HTTP/1\.[01] " + status + rb" ", path)
+            self.assertIn(header, answer, path)
+            self.assertTrue(answer.endswith(b"\r\n\r\n"), (path, answer[-40:]))
+
     def test_a_bad_photo_name_is_refused(self):
         for name in (".hidden", "a..jpg", "..%2f..%2fetc"):
             self.assertIn(self.call("PUT", f"/photos/{name}", b"x", raw=True)[0], (400, 404), name)

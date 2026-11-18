@@ -22,6 +22,7 @@ only, plus `bcrypt` to read an htpasswd file, so the calendar password is the sy
     PUT  /photos/<name>       a photo's bytes
     GET  /photos/<name>       a photo
     GET  /health              200 "ok", no login (for monitoring)
+    HEAD                      any GET above, answered without its body
 
 /state answers carry X-Content-SHA256, the hash of the body as it was sent. When an upload's answer
 is lost the phone is left a version behind what it sent, and its next write gets a 412. Comparing
@@ -481,7 +482,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(size))
             self.end_headers()
-            shutil.copyfileobj(f, self.wfile)
+            if self.command != "HEAD":
+                shutil.copyfileobj(f, self.wfile)
 
     def length(self, limit):
         """The request body's length, or None once an error has been answered."""
@@ -585,6 +587,10 @@ class Handler(BaseHTTPRequestHandler):
             headers["X-Follows"] = "1" if tag == doc["tag"] or tag in doc.get("trail", ()) else "0"
         body = json.dumps(doc.get("data") or {}, ensure_ascii=False, separators=(",", ":"))
         self.send(200, body, "application/json; charset=utf-8", headers)
+
+    # A GET's answer without its body, as curl -I and monitors ask: http.server answered 501
+    # "Unsupported method", which xrnhub's log page shows as an error.
+    do_HEAD = do_GET
 
     def do_PUT(self):
         path = self.route()
