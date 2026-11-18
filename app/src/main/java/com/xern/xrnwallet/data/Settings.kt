@@ -63,6 +63,8 @@ data class Settings(
     val ratesUpdatedAt: Long = 0,
     /** Reports' trend chart squeezed to the card's width, rather than scrolled sideways. */
     val trendFit: Boolean = false,
+    /** The account of the expense or income recorded last, which a new bill starts on. */
+    val lastAccountId: Long? = null,
 ) {
     val moneyFormat: MoneyFormat
         get() = MoneyFormat(SeparatorStyle.entries[separators], DecimalMode.entries[decimals])
@@ -76,6 +78,13 @@ data class Settings(
         )
 
     val locked: Boolean get() = pinHash != null || patternHash != null || biometric
+
+    /**
+     * After [bill] is saved: a new expense or income on an account makes that account the next new
+     * bill's. An edit, a transfer or a bill on no account leaves the choice as it was.
+     */
+    fun recorded(bill: Bill, new: Boolean): Settings =
+        if (new && bill.type != BillType.TRANSFER && bill.accountId != null) copy(lastAccountId = bill.accountId) else this
 
     /**
      * What here this app can't work with, or null. Each is looked up as the app opens, so one out of

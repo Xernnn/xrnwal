@@ -154,13 +154,16 @@ private fun savePhoto(context: Context, uri: Uri): String? = runCatching {
 data class BillStart(val accountId: Long?, val currency: String)
 
 /**
- * Where a new bill starts: on the account the last bill used, or else the first open one, in that
- * account's currency as picking it would set, or in [base] with no account. Otherwise 20 typed for a
- * US card would leave it as A$20.
+ * Where a new bill starts: on the account of the expense or income recorded last, [remembered], or,
+ * before one has been, the account of the one entered most recently (the highest id; not the latest
+ * date, which can be next month's rent or a recurring bill), or else the first open account. In that
+ * account's currency, as picking it would set, or in [base] with no account: otherwise 20 typed for
+ * a US card would leave it as A$20. An account archived since is passed over.
  */
-fun Snapshot.billStart(base: String): BillStart {
-    val account = bills.firstOrNull { it.accountId != null && it.type != BillType.TRANSFER }?.accountId?.let(accountById::get)
-        ?: accounts.firstOrNull { !it.archived }
+fun Snapshot.billStart(base: String, remembered: Long? = null): BillStart {
+    fun open(id: Long?) = id?.let(accountById::get)?.takeUnless { it.archived }
+    val entered = bills.filter { it.accountId != null && it.type != BillType.TRANSFER && it.recurringId == null }.maxByOrNull { it.id }
+    val account = open(remembered) ?: open(entered?.accountId) ?: accounts.firstOrNull { !it.archived }
     return BillStart(account?.id, account?.currency ?: base)
 }
 
@@ -186,7 +189,7 @@ fun BillEditScreen(id: Long, date: Long, initialType: Int) {
         )
     }
     val usable = s.accounts.filter { !it.archived }
-    val start = remember { s.billStart(settings.baseCurrency) }
+    val start = remember { s.billStart(settings.baseCurrency, settings.lastAccountId) }
     var accountId by remember { mutableStateOf(if (existing != null) existing.accountId else start.accountId) }
     var toAccountId by remember { mutableStateOf(existing?.toAccountId) }
     var note by remember { mutableStateOf(existing?.note.orEmpty()) }
@@ -265,6 +268,7 @@ fun BillEditScreen(id: Long, date: Long, initialType: Int) {
         saving = true
         scope.launch {
             repo.saveBill(bill, tagIds)
+            repo.store.update { it.recorded(bill, new = existing == null) }
             nav.leavePage()
         }
     }
