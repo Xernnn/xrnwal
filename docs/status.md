@@ -154,8 +154,8 @@ the Friday before and the Monday after, without changing the setting to confirm 
 ## Reports charts and the add page (2026-11-19)
 
 Drawn without a phone from made-up data (`app/src/debug/.../ui/Previews.kt`, `android preview
-render`), dark and light: the trend chart scrolling and fitted for a week, a month, a year, 90 and
-365 days; the pace, daily, income and expenses, and category cards; the add page; Welcome; and all
+render`), dark and light: the trend chart fitted (how it opens) and scrolling for a week, a month,
+a year, 90 and 365 days; the pace, daily, income and expenses, and category cards; the add page; Welcome; and all
 eight app icons as tiles, which match `docs/icon.svg`. Taps and the hold-and-drag along the trend
 were not tried on a phone: a point chosen in code drew its readout as intended. Not yet on a real
 phone or with the real data.
@@ -164,11 +164,15 @@ phone or with the real data.
   the figures for the rest come from tapping.
 - The weekday averages leave out bills from recurring rules. A rent entered by hand still counts on
   whichever weekday it fell, and in a month view that can make one weekday look the dearest.
-- The category colours are the ranking pie's own. They're lighter than a chart palette tuned for a
-  dark page would be, so each band is also named beside the chart.
-- Education's cap, and the music note, paw prints and plug, are mostly dark drawings. They used to
-  get a lighter circle in the dark theme; now every circle is the same grey and these get a thin
-  light edge instead.
+- Category colours (the pie, its rows and Categories by month) are eight hues stepped separately for
+  the dark and light themes and checked with a chart-palette validator: lightness, colour, how far
+  apart neighbours are (colour-blind vision included) and contrast with the page. Three of the
+  light theme's sit below 3:1 on white, so each band is named beside its chart. Earlier colours were
+  pale on the dark page and repeated after the tenth category; now the ninth on are grey.
+- Education's cap, and the music note, paw prints and plug, were mostly near-black drawings that
+  sank into the dark theme's circle. They first got a lighter circle, then a light edge; now
+  `tools/fluent_icons.py` draws them lighter (OKLab lightness 0.40 to 0.70, colour strengthened),
+  so every icon sits on the same circle with nothing special about it.
 
 ## Still open
 
