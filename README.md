@@ -59,7 +59,11 @@ build only accepts `https://` addresses.
 ./gradlew :app:assembleDebug          # app/build/outputs/apk/debug/app-debug.apk
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ./gradlew :app:assembleRelease        # app/build/outputs/apk/release/app-release.apk
+android preview render "?:app" --fqn=com.xern.xrnwallet.ui.PreviewsKt.ReportsMonthPreview
 ```
+
+The debug build's `ui/Previews.kt` draws Reports, the add page and Welcome from made-up bills, with
+no phone, through Google's `android` command.
 
 Use the release build day to day. A debug build responds about three times slower, because Android
 can't precompile it. Both are signed with the build machine's debug key, so either installs over the
