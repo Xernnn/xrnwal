@@ -1,6 +1,19 @@
 package com.xern.xrnwallet.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.UnfoldLess
+import androidx.compose.runtime.MutableState
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
+import com.xern.xrnwallet.domain.Dates
+import java.time.format.TextStyle
+import java.util.Locale
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -34,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.xern.xrnwallet.data.Bill
 import com.xern.xrnwallet.data.BillType
+import com.xern.xrnwallet.data.Insights
 import com.xern.xrnwallet.data.Snapshot
 import com.xern.xrnwallet.data.Stats
 import com.xern.xrnwallet.data.inRange
@@ -119,7 +133,9 @@ fun ReportsScreen() {
                 style = MaterialTheme.typography.bodyLarge,
             )
         }
-        EndlessPager(pages, Modifier.weight(1f)) { ReportPage(it, bills, view) }
+        // The monthly budget, when it applies to what's shown: not to a filtered few.
+        val budget = if (filter.active || !settings.budgetEnabled) null else s.budgets.firstOrNull { it.categoryId == null }?.amountCents
+        EndlessPager(pages, Modifier.weight(1f)) { ReportPage(it, bills, view, budget) }
     }
 
     if (pick) {
@@ -137,12 +153,14 @@ fun ReportsScreen() {
 }
 
 @Composable
-private fun ReportPage(period: Period, bills: List<Bill>, view: ReportView) {
+private fun ReportPage(period: Period, bills: List<Bill>, view: ReportView, budget: Long?) {
     val s = snap()
     val f = fmt()
     val nav = LocalNav.current
+    val repo = LocalRepo.current
+    val settings = prefs()
     val today = LocalDate.now()
-    val rules = prefs().periodRules
+    val rules = settings.periodRules
     val range = period.range(rules)
     val inPeriod = remember(bills, range) { bills.inRange(range) }
     val totals = remember(inPeriod) { inPeriod.totals() }
@@ -152,6 +170,14 @@ private fun ReportPage(period: Period, bills: List<Bill>, view: ReportView) {
     val points = remember(bills, period, range, view.trendType) { Stats.trend(bills, period, range, view.trendType) }
     val ranks = remember(s, inPeriod, view.rankType, view.topLevel) { Stats.ranking(s, inPeriod, view.rankType, view.topLevel) }
     val top = remember(inPeriod, view.topType) { Stats.top(inPeriod, view.topType) }
+    val months = remember(period, range, rules) { Insights.window(period, range, rules) }
+    val flows = remember(bills, months, rules) { Insights.flows(bills, months, rules) }
+    val mix = remember(s, bills, months, rules) { Insights.mix(s, bills, months, rules) }
+    val focus = when {
+        period !is Period.Year -> months.last()
+        period.year == today.year -> rules.monthOf(today).let { if (it.year == period.year) it else months.last() }
+        else -> months.last()
+    }
 
     Column(
         Modifier
@@ -170,13 +196,22 @@ private fun ReportPage(period: Period, bills: List<Bill>, view: ReportView) {
                         )
                         Muted("Average: ${if (total == 0L) "" else f.money(average)}", Modifier.padding(top = 2.dp))
                     }
+                    FitToggle(settings.trendFit) { repo.store.update { it.copy(trendFit = !it.trendFit) } }
                     SwitchPill(if (view.trendType == BillType.EXPENSE) "Expenses" else "Income") {
                         view.trendType = if (view.trendType == BillType.EXPENSE) BillType.INCOME else BillType.EXPENSE
                     }
                 }
-                LineChart(points, average.takeIf { total != 0L }, Modifier.padding(top = 12.dp))
+                LineChart(
+                    points,
+                    average.takeIf { total != 0L },
+                    monthly = period is Period.Year,
+                    fit = settings.trendFit,
+                    modifier = Modifier.padding(top = 12.dp),
+                )
             }
         }
+        if (period !is Period.Custom) PaceCard(period, bills, rules, today, budget)
+        DailyCard(range, bills, today, rules.firstDayOfWeek)
         Panel {
             Column(Modifier.padding(16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -214,6 +249,8 @@ private fun ReportPage(period: Period, bills: List<Bill>, view: ReportView) {
                 }
             }
         }
+        FlowCard(flows, focus)
+        MixCard(mix, months, focus)
         Panel {
             Column(Modifier.padding(top = 16.dp, bottom = 8.dp)) {
                 Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -297,18 +334,54 @@ private fun niceStep(maximum: Double): Double {
     return nice * magnitude
 }
 
+/**
+ * The trend card's switch between its two looks: lit when the chart is squeezed to fit the card,
+ * dark when it scrolls sideways at a readable width per point.
+ */
 @Composable
-private fun LineChart(points: List<Stats.Point>, averageCents: Long?, modifier: Modifier = Modifier) {
+private fun FitToggle(fit: Boolean, onToggle: () -> Unit) {
+    val lit = MaterialTheme.colorScheme.primary
+    Box(
+        Modifier
+            .padding(end = 8.dp)
+            .size(32.dp)
+            .clip(CircleShape)
+            .background(if (fit) lit else MaterialTheme.colorScheme.surfaceVariant)
+            .clickable(onClick = onToggle),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            Icons.Filled.UnfoldLess,
+            if (fit) "Scroll the chart" else "Fit the chart",
+            Modifier.size(20.dp).rotate(90f),
+            tint = if (fit) Color.Black else MaterialTheme.colorScheme.onSurface,
+        )
+    }
+}
+
+/** A squeezed chart's label: a day's number, or its month's name on the 1st; a month's name. */
+private fun fitLabel(point: Stats.Point, monthly: Boolean): String =
+    if (!monthly && point.date.dayOfMonth == 1) point.date.month.getDisplayName(TextStyle.SHORT, Locale.ENGLISH) else point.label
+
+/** What a chosen point reads: "Nov 12" or "Oct 2026", and its figure. */
+private fun pointTitle(point: Stats.Point, monthly: Boolean): String =
+    if (monthly) "${point.label} ${point.date.year}" else Dates.short(point.date)
+
+/**
+ * The trend, as a line over a scale of [rows] steps. Scrolling, each point gets a column wide enough
+ * for its label. Fitted, every point shares the card's width and only some are labelled; tapping a
+ * point, or holding and dragging along the line, shows its figure either way.
+ */
+@Composable
+private fun LineChart(points: List<Stats.Point>, averageCents: Long?, monthly: Boolean, fit: Boolean, modifier: Modifier = Modifier) {
     val font = rememberCanvasTypeface()
-    val line = MaterialTheme.colorScheme.primary
-    val grid = MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
     val label = MaterialTheme.colorScheme.onSurfaceVariant
     val maxUnits = max((points.maxOfOrNull { it.cents } ?: 0L) / 100.0, 1.0)
     val step = niceStep(maxUnits)
     val rows = kotlin.math.ceil(maxUnits / step).toInt().coerceAtLeast(5)
-    val top = step * rows
-    val height = 200.dp
-    Row(modifier.fillMaxWidth().height(height)) {
+    val scale = Scale(step, rows)
+    val selected = remember(points) { mutableStateOf<Int?>(null) }
+    Row(modifier.fillMaxWidth().height(200.dp)) {
         Canvas(Modifier.width(44.dp).fillMaxHeight()) {
             val paint = android.graphics.Paint().apply {
                 color = label.toArgb()
@@ -325,48 +398,128 @@ private fun LineChart(points: List<Stats.Point>, averageCents: Long?, modifier: 
                 drawContext.canvas.nativeCanvas.drawText(text, size.width - 6.dp.toPx(), y + 4.dp.toPx(), paint)
             }
         }
-        val slot = 38.dp
-        Box(Modifier.weight(1f).horizontalScroll(rememberScrollState())) {
-            Canvas(Modifier.width(slot * points.size.coerceAtLeast(9)).fillMaxHeight()) {
-                val chart = size.height - 26.dp.toPx()
-                val offset = 4.dp.toPx()
-                val slotPx = slot.toPx()
-                fun yOf(units: Double) = chart - (units / top * chart).toFloat() + offset
-                (0..rows).forEach { row ->
-                    val y = chart - chart * row / rows + offset
-                    drawLine(
-                        grid, Offset(0f, y), Offset(size.width, y), 1.dp.toPx(),
-                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f)),
-                    )
-                }
-                if (averageCents != null) {
-                    val y = yOf(averageCents / 100.0)
-                    drawLine(
-                        line.copy(alpha = 0.7f), Offset(0f, y), Offset(size.width, y), 1.5.dp.toPx(),
-                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(18f, 8f)),
-                    )
-                }
-                val path = Path()
-                points.forEachIndexed { index, point ->
-                    val x = slotPx * index + slotPx / 2
-                    val y = yOf(point.cents / 100.0)
-                    if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
-                }
-                drawPath(path, line, style = Stroke(2.dp.toPx()))
-                val paint = android.graphics.Paint().apply {
-                    color = label.toArgb()
-                    textSize = 11.sp.toPx()
-                    isAntiAlias = true
-                    textAlign = android.graphics.Paint.Align.CENTER
-                    typeface = font
-                }
-                points.forEachIndexed { index, point ->
-                    val x = slotPx * index + slotPx / 2
-                    if (point.cents > 0) drawCircle(line, 3.dp.toPx(), Offset(x, yOf(point.cents / 100.0)))
-                    drawContext.canvas.nativeCanvas.drawText(point.label, x, size.height - 6.dp.toPx(), paint)
-                }
+        if (fit) {
+            BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
+                val room = (maxWidth / if (monthly) 24.dp else 26.dp).toInt()
+                val shown = remember(points, room) { Stats.fitLabels(points.map { it.date }, monthly, room).toSet() }
+                Plot(
+                    points, averageCents, scale, monthly, selected,
+                    slot = maxWidth / points.size.coerceAtLeast(1),
+                    labelOf = { if (it in shown) fitLabel(points[it], monthly) else null },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        } else {
+            val slot = 38.dp
+            Box(Modifier.weight(1f).horizontalScroll(rememberScrollState())) {
+                Plot(
+                    points, averageCents, scale, monthly, selected,
+                    slot = slot,
+                    labelOf = { points[it].label },
+                    modifier = Modifier.width(slot * points.size.coerceAtLeast(9)).fillMaxHeight(),
+                )
             }
         }
+    }
+}
+
+private class Scale(val step: Double, val rows: Int) {
+    val top: Double get() = step * rows
+}
+
+@Composable
+private fun Plot(
+    points: List<Stats.Point>,
+    averageCents: Long?,
+    scale: Scale,
+    monthly: Boolean,
+    selected: MutableState<Int?>,
+    slot: Dp,
+    labelOf: (Int) -> String?,
+    modifier: Modifier,
+) {
+    val f = fmt()
+    val font = rememberCanvasTypeface()
+    val line = MaterialTheme.colorScheme.primary
+    val grid = line.copy(alpha = 0.28f)
+    val label = MaterialTheme.colorScheme.onSurfaceVariant
+    val ink = MaterialTheme.colorScheme.onSurface
+    val bubble = MaterialTheme.colorScheme.surfaceVariant
+    val density = LocalDensity.current
+    val slotPx = with(density) { slot.toPx() }
+    fun indexAt(x: Float) = (x / slotPx).toInt().coerceIn(0, (points.size - 1).coerceAtLeast(0))
+    Canvas(
+        modifier
+            .pointerInput(points, slotPx) {
+                detectTapGestures { at ->
+                    val index = indexAt(at.x)
+                    selected.value = if (selected.value == index) null else index
+                }
+            }
+            .pointerInput(points, slotPx) {
+                detectDragGesturesAfterLongPress(
+                    onDragStart = { selected.value = indexAt(it.x) },
+                    onDrag = { change, _ -> selected.value = indexAt(change.position.x) },
+                )
+            },
+    ) {
+        val chart = size.height - 26.dp.toPx()
+        val offset = 4.dp.toPx()
+        fun yOf(units: Double) = chart - (units / scale.top * chart).toFloat() + offset
+        fun xOf(index: Int) = slotPx * index + slotPx / 2
+        (0..scale.rows).forEach { row ->
+            val y = chart - chart * row / scale.rows + offset
+            drawLine(
+                grid, Offset(0f, y), Offset(size.width, y), 1.dp.toPx(),
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f)),
+            )
+        }
+        if (averageCents != null) {
+            val y = yOf(averageCents / 100.0)
+            drawLine(
+                line.copy(alpha = 0.7f), Offset(0f, y), Offset(size.width, y), 1.5.dp.toPx(),
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(18f, 8f)),
+            )
+        }
+        val path = Path()
+        points.forEachIndexed { index, point ->
+            val x = xOf(index)
+            val y = yOf(point.cents / 100.0)
+            if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+        }
+        drawPath(path, line, style = Stroke(if (slot < 4.dp) 1.5.dp.toPx() else 2.dp.toPx()))
+        val paint = android.graphics.Paint().apply {
+            color = label.toArgb()
+            textSize = 11.sp.toPx()
+            isAntiAlias = true
+            textAlign = android.graphics.Paint.Align.CENTER
+            typeface = font
+        }
+        val dot = if (slot >= 7.dp) minOf(3.dp.toPx(), slotPx * 0.3f) else 0f
+        points.forEachIndexed { index, point ->
+            val x = xOf(index)
+            if (point.cents > 0 && dot > 0f) drawCircle(line, dot, Offset(x, yOf(point.cents / 100.0)))
+            val text = labelOf(index) ?: return@forEachIndexed
+            val half = paint.measureText(text) / 2
+            drawContext.canvas.nativeCanvas.drawText(text, x.coerceIn(half, size.width - half), size.height - 6.dp.toPx(), paint)
+        }
+        val chosen = selected.value?.takeIf { it in points.indices } ?: return@Canvas
+        val point = points[chosen]
+        val x = xOf(chosen)
+        val y = yOf(point.cents / 100.0)
+        drawLine(ink.copy(alpha = 0.35f), Offset(x, offset), Offset(x, chart + offset), 1.dp.toPx())
+        drawCircle(ink, 5.dp.toPx(), Offset(x, y))
+        drawCircle(line, 3.5.dp.toPx(), Offset(x, y))
+        val text = "${pointTitle(point, monthly)}  ${f.money(point.cents)}"
+        val title = android.graphics.Paint(paint).apply { color = ink.toArgb(); textSize = 12.sp.toPx(); textAlign = android.graphics.Paint.Align.LEFT }
+        val padding = 8.dp.toPx()
+        val width = title.measureText(text) + padding * 2
+        val height = 22.dp.toPx()
+        val left = (x - width / 2).coerceIn(0f, (size.width - width).coerceAtLeast(0f))
+        // Above the line, unless the point is up there too.
+        val top = if (y < offset + height + 8.dp.toPx()) y + 10.dp.toPx() else offset
+        drawRoundRect(bubble, Offset(left, top), Size(width, height), CornerRadius(height / 2))
+        drawContext.canvas.nativeCanvas.drawText(text, left + padding, top + height / 2 + 4.dp.toPx(), title)
     }
 }
 

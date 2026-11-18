@@ -1,7 +1,12 @@
 package com.xern.xrnwallet
 
 import com.xern.xrnwallet.domain.Dates
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.ui.graphics.Color
+import com.xern.xrnwallet.data.Seed
 import com.xern.xrnwallet.ui.Art
+import com.xern.xrnwallet.ui.bubbleColour
 import com.xern.xrnwallet.ui.budgetFace
 import com.xern.xrnwallet.ui.fittingSize
 import com.xern.xrnwallet.ui.hourOf
@@ -54,6 +59,19 @@ class LookTest {
         assertFalse(Art.isDark("🍺"))
         // A dark subject in another style is a symbol, which takes its own colour.
         assertFalse(Art.isDark("s2:🎵"))
+    }
+
+    @Test
+    fun everyCategoryDrawingSitsOnTheSameCircle() {
+        // Education's cap is a dark drawing, which used to get a lighter circle than every other.
+        val dark = darkColorScheme(surface = Color(0xFF1E1E20), surfaceVariant = Color(0xFF2C2C2F))
+        val light = lightColorScheme(surface = Color.White, surfaceVariant = Color(0xFFEDEDF0))
+        val icons = (Seed.expenseCategories + Seed.incomeCategories).map { it.second } + Art.choices(1)
+        for (scheme in listOf(dark, light)) {
+            val circles = icons.associateWith { bubbleColour(it, scheme) }
+            assertEquals(setOf(scheme.surfaceVariant), circles.values.toSet())
+        }
+        assertTrue(Art.isDark("🎓"))
     }
 
     @Test

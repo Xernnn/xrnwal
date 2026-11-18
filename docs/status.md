@@ -151,6 +151,25 @@ edit pages; the Tags filter chip, whose page looks like the other chips; and the
 Restore Purchase and Feedback pages. Forward and Backward under On weekends are read as moving to
 the Friday before and the Monday after, without changing the setting to confirm it.
 
+## Reports charts and the add page (2026-11-19)
+
+Drawn without a phone from made-up data (`app/src/debug/.../ui/Previews.kt`, `android preview
+render`), dark and light: the trend chart scrolling and fitted for a week, a month, a year, 90 and
+365 days; the pace, daily, income and expenses, and category cards; the add page; Welcome; and all
+eight app icons as tiles, which match `docs/icon.svg`. Taps and the hold-and-drag along the trend
+were not tried on a phone: a point chosen in code drew its readout as intended. Not yet on a real
+phone or with the real data.
+
+- Fitting a chart to the card keeps every point but not every label: a month gets about ten, and
+  the figures for the rest come from tapping.
+- The weekday averages leave out bills from recurring rules. A rent entered by hand still counts on
+  whichever weekday it fell, and in a month view that can make one weekday look the dearest.
+- The category colours are the ranking pie's own. They're lighter than a chart palette tuned for a
+  dark page would be, so each band is also named beside the chart.
+- Education's cap, and the music note, paw prints and plug, are mostly dark drawings. They used to
+  get a lighter circle in the dark theme; now every circle is the same grey and these get a thin
+  light edge instead.
+
 ## Still open
 
 - Paging against the build before it, on an emulator with both fully compiled: opening a bill and going

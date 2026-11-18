@@ -25,6 +25,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toBitmap
 import com.xern.xrnwallet.MainActivity
@@ -32,17 +40,18 @@ import com.xern.xrnwallet.R
 
 /** The launcher icon, chosen by enabling one of the manifest's activity aliases. */
 object AppIcons {
-    class Choice(val name: String, @DrawableRes val icon: Int)
+    /** A launcher icon, and its background layer: the colour and the xrn stroke. */
+    class Choice(val name: String, @DrawableRes val icon: Int, @DrawableRes val background: Int)
 
     val choices = listOf(
-        Choice("Lime", R.mipmap.ic_launcher),
-        Choice("Gold", R.mipmap.ic_launcher_gold),
-        Choice("Orange", R.mipmap.ic_launcher_orange),
-        Choice("Rose", R.mipmap.ic_launcher_rose),
-        Choice("Violet", R.mipmap.ic_launcher_violet),
-        Choice("Blue", R.mipmap.ic_launcher_blue),
-        Choice("Teal", R.mipmap.ic_launcher_teal),
-        Choice("Slate", R.mipmap.ic_launcher_slate),
+        Choice("Lime", R.mipmap.ic_launcher, R.drawable.ic_launcher_background),
+        Choice("Gold", R.mipmap.ic_launcher_gold, R.drawable.ic_launcher_background_gold),
+        Choice("Orange", R.mipmap.ic_launcher_orange, R.drawable.ic_launcher_background_orange),
+        Choice("Rose", R.mipmap.ic_launcher_rose, R.drawable.ic_launcher_background_rose),
+        Choice("Violet", R.mipmap.ic_launcher_violet, R.drawable.ic_launcher_background_violet),
+        Choice("Blue", R.mipmap.ic_launcher_blue, R.drawable.ic_launcher_background_blue),
+        Choice("Teal", R.mipmap.ic_launcher_teal, R.drawable.ic_launcher_background_teal),
+        Choice("Slate", R.mipmap.ic_launcher_slate, R.drawable.ic_launcher_background_slate),
     )
 
     private fun component(context: Context, choice: Choice) =
@@ -112,5 +121,26 @@ fun AppIconsScreen() {
                 }
             }
         }
+    }
+}
+
+/**
+ * The app's tile, standing in for its name: the launcher icon's layers cut to the xrn family's rounded
+ * square (corners 24 of 100), in the colour chosen on App Icons. The layers are 108 units across with
+ * the tile in the middle 72, so they're drawn half as large again and the edge cut away.
+ */
+@Composable
+fun AppTile(size: Dp, modifier: Modifier = Modifier, choice: AppIcons.Choice? = null) {
+    val context = LocalContext.current
+    val shown = choice ?: remember { AppIcons.choices[AppIcons.current(context)] }
+    Box(
+        modifier
+            .size(size)
+            .clip(RoundedCornerShape(percent = 24))
+            .semantics { contentDescription = context.getString(R.string.app_name) },
+        contentAlignment = Alignment.Center,
+    ) {
+        Image(painterResource(shown.background), null, Modifier.requiredSize(size * 1.5f))
+        Image(painterResource(R.drawable.ic_launcher_foreground), null, Modifier.requiredSize(size * 1.5f))
     }
 }

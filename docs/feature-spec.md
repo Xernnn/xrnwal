@@ -17,6 +17,8 @@ twice.
 
 - Shown once, on a phone with no bills. Someone updating the app with records in it never sees it.
   Mine, Getting started opens it again.
+- The app's tile, then "Welcome". The tile is drawn in the colour chosen on App Icons, cut to the
+  xrn family's rounded square.
 - Start here: add a bank or card, add a first bill, set a budget. Each step opens its page and comes
   back, and is ticked once the data shows it's done.
 - Already have records?: Import from another app (Import Data) and Restore a backup (Data
@@ -48,6 +50,11 @@ twice.
   an Edit tile that opens the category editor.
 - Account chip. Its picker is a page of cards grouped Savings / Credit, each with "Balance" over the
   amount and the current one outlined; + to create, "Do not bind personal accounts" at the foot.
+  A new bill starts on the account of the expense or income recorded last (kept across restarts,
+  Add again today included), not the newest-dated bill's, which can be next month's rent or a
+  recurring bill. Edits, transfers and bills on no account leave that choice alone. Before anything
+  has been recorded: the account of the bill entered most recently, then the first open account. An
+  archived account is passed over.
 - Tag button (multi-select, + to create).
 - Budget icon at the right of the row, like the tag button: lit and struck through when a bill is
   left out of the budget, with a short message saying which. Our addition: the reference has this
@@ -82,7 +89,11 @@ Transfers appear in account history as "From >> To" and count in neither expense
 ## Reports
 
 - Period picker with Custom. Filter sheet: tags, ledgers, accounts; reset and confirm.
-- Trend line chart, horizontally scrollable, with average line. Switch Expenses/Income.
+- Trend line chart with average line. Switch Expenses/Income.
+  - Two looks, switched by the >< button beside Expenses/Income and kept across restarts: scrolling
+    sideways at 38 dp a point (the reference's), or fitted to the card, every point at once, labelled
+    on a pattern of dates that fits (1, 4, 7...; 1, 8, 15, 22; 1, 11, 21; month starts; a month's 1st
+    reads as its name). Tap a point, or hold and drag along the line, for its date and figure.
   - Month view: daily points. Year view: monthly points.
   - Average = total / elapsed units (days in month, months so far this year).
   - Use calendar days. The original computes days from hours, so a month containing the DST change
@@ -90,6 +101,20 @@ Transfers appear in account history as "From >> To" and count in neither expense
 - Category ranking: pie, then ranked rows (name, %, amount, bill count, bar), top 5 with expand.
   Switches: Expenses/Income, Top level category/All categories. A row opens that category's bills.
 - Bill Amount Ranking TOP 10 with Expenses/Income switch.
+
+Our additions, between them (none is in the reference):
+
+- Spending pace (Week, Month, Year): expenses added up through the period, against the period before
+  and, on a month with an overall budget and no filter, an even spread of the budget. Tap a day for
+  both totals at that day.
+- Daily spending: each day shaded in four steps, set at 40, 70 and 90 in a hundred of the days with
+  any spending, so one rent day doesn't pale the rest. Up to 42 days it's a calendar, longer it's
+  columns of weeks. Under it, the average per weekday, leaving out bills recorded by recurring rules.
+  Tap a day for its date and figure; it opens on the dearest day.
+- Income and expenses: twelve accounting months (a year's own, else the twelve up to the period),
+  income above the line and expenses below, the net as a line. Tap a month for its three figures.
+- Categories by month: the same twelve months stacked by the five largest top-level categories and
+  the rest (uncategorised included), the chosen month naming each share.
 
 ## Accounts
 

@@ -11,6 +11,7 @@ import java.time.YearMonth
 import java.time.format.TextStyle
 import java.time.temporal.ChronoUnit
 import java.util.Locale
+import kotlin.math.ceil
 
 /** Every table in memory. Screens derive what they show from this, which keeps the sums testable. */
 data class Snapshot(
@@ -302,7 +303,8 @@ object Stats {
     fun average(totalCents: Long, units: Long): Long =
         if (units <= 0) 0 else Math.round(totalCents.toDouble() / units)
 
-    data class Point(val label: String, val cents: Long)
+    /** One step of a trend: its label under the chart, its total, and the day it starts on. */
+    data class Point(val label: String, val cents: Long, val date: LocalDate)
 
     /** Monthly points for a year, daily points otherwise. Income or expenses only. */
     fun trend(bills: List<Bill>, period: Period, range: DateRange, type: Int): List<Point> {
@@ -313,14 +315,45 @@ object Stats {
                 Point(
                     java.time.Month.of(month).getDisplayName(TextStyle.SHORT, Locale.ENGLISH),
                     byMonth[month].orEmpty().sumOf { it.baseCents },
+                    LocalDate.of(period.year, month, 1),
                 )
             }
         }
         val byDay = matching.groupBy { it.date }
         return generateSequence(range.start) { it.plusDays(1) }
             .takeWhile { it <= range.endInclusive }
-            .map { Point(it.dayOfMonth.toString(), byDay[it].orEmpty().sumOf { bill -> bill.baseCents }) }
+            .map { Point(it.dayOfMonth.toString(), byDay[it].orEmpty().sumOf { bill -> bill.baseCents }, it) }
             .toList()
+    }
+
+    /**
+     * Which points of a chart squeezed to fit its width get a label, when only [room] labels fit
+     * side by side. Days are labelled on dates that read as a pattern (the 1st, 4th, 7th...; or the
+     * 1st, 8th, 15th, 22nd; ...; at most every month's first), and a year's months every so many.
+     * Two labels never come closer than the spacing needed for [room] of them.
+     */
+    fun fitLabels(dates: List<LocalDate>, monthly: Boolean, room: Int): List<Int> {
+        val count = dates.size
+        if (count == 0) return emptyList()
+        val gap = ceil(count / room.coerceAtLeast(1).toDouble()).toInt()
+        if (gap <= 1) return dates.indices.toList()
+        if (monthly) return dates.indices.filter { it % gap == 0 }
+        val marks: Set<Int>? = when {
+            gap <= 2 -> (1..29 step 2).toSet()
+            gap <= 3 -> (1..28 step 3).toSet()
+            gap <= 7 -> setOf(1, 8, 15, 22)
+            gap <= 10 -> setOf(1, 11, 21)
+            gap <= 15 -> setOf(1, 16)
+            else -> null
+        }
+        val everyMonths = ceil(gap / 30.0).toInt()
+        val picked = mutableListOf<Int>()
+        dates.forEachIndexed { index, date ->
+            val wanted = if (marks != null) date.dayOfMonth in marks
+            else date.dayOfMonth == 1 && (date.monthValue - 1) % everyMonths == 0
+            if (wanted && (picked.isEmpty() || index - picked.last() >= gap)) picked += index
+        }
+        return picked
     }
 
     data class Rank(val category: Category?, val cents: Long, val share: Double, val count: Int)
