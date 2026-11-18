@@ -3,6 +3,7 @@
     python3 -m unittest server/test_xrnwallet_sync.py     (from the repo root; needs bcrypt)
 """
 import base64
+import gzip
 import hashlib
 import http.client
 import importlib.util
@@ -215,6 +216,35 @@ class SyncServerTest(unittest.TestCase):
         _, body, headers = self.call("GET", "/state")
         self.assertEqual(headers["X-Content-SHA256"], hashlib.sha256(raw).hexdigest())
         self.assertAlmostEqual(json.loads(body)["bills"][0]["rate"], 1e-5)
+
+    def test_a_gzipped_upload_is_taken_and_hashed_as_the_document_it_holds(self):
+        # A 160 KB copy goes up as 16 KB, so much less of it is in flight when a phone's connection
+        # drops. The hash stays the document's: it's what the phone compares with its own.
+        raw = json.dumps(document("packed", "x" * 5000), separators=(",", ":")).encode()
+        status, _, put = self.call("PUT", "/state", gzip.compress(raw), {"If-Match": '"0"', "Content-Encoding": "gzip"},
+                                   raw=True)
+        self.assertEqual((status, put["X-Content-SHA256"]), (200, hashlib.sha256(raw).hexdigest()))
+        _, body, got = self.call("GET", "/state")
+        self.assertEqual((json.loads(body)["bills"][0]["note"], got["X-Content-SHA256"]),
+                         ("packed", hashlib.sha256(raw).hexdigest()))
+
+    def test_state_answers_say_a_gzipped_body_is_taken(self):
+        # How a phone tells this server from one that would read gzip as a broken document.
+        self.assertEqual(self.call("GET", "/state")[2]["Accept-Encoding"], "gzip")
+        self.assertEqual(self.put(document("a"), '"0"')[2]["Accept-Encoding"], "gzip")
+        self.assertEqual(self.call("PUT", "/state", b"[", {"If-Match": '"1"'}, raw=True)[2]["Accept-Encoding"], "gzip")
+
+    def test_gzip_that_unpacks_past_the_limit_or_wont_unpack_is_refused(self):
+        packed = gzip.compress(b'{"bills":["' + b"a" * 5000 + b'"]}')
+        with unittest.mock.patch.object(srv, "MAX_BODY", 1000):
+            self.assertEqual(self.call("PUT", "/state", packed, {"If-Match": '"0"', "Content-Encoding": "gzip"},
+                                       raw=True)[0], 413)
+        for bad in (b"not gzip", packed[: len(packed) // 2]):
+            self.assertEqual(self.call("PUT", "/state", bad, {"If-Match": '"0"', "Content-Encoding": "gzip"},
+                                       raw=True)[0], 400)
+        self.assertEqual(self.call("PUT", "/state", packed, {"If-Match": '"0"', "Content-Encoding": "br"},
+                                   raw=True)[0], 415)
+        self.assertEqual(self.call("GET", "/state")[2]["ETag"], '"0"')
 
     def test_earlier_copies_can_be_listed_and_fetched(self):
         self.put(document("one"), '"0"')

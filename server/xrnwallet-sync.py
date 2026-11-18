@@ -12,7 +12,9 @@ only, plus `bcrypt` to read an htpasswd file, so the calendar password is the sy
     GET  /state               200, the document; ETag: "<version>" (0 while there is none)
                               If-None-Match: "<version>" -> 304 when unchanged
     PUT  /state               needs If-Match: "<version>" (or "*"); 200 with the new ETag, or
-                              412 if the copy here isn't the one the phone last saw
+                              412 if the copy here isn't the one the phone last saw. The body
+                              may come gzipped (Content-Encoding: gzip), and /state answers
+                              say so (Accept-Encoding: gzip) for a phone to know it can
     GET  /versions            the earlier copies kept here, newest first, as a JSON list of
                               {id, version, updated, by, bills}
     GET  /versions/<id>       one earlier copy
@@ -50,6 +52,7 @@ import shutil
 import sys
 import threading
 import time
+import zlib
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -452,6 +455,10 @@ class Handler(BaseHTTPRequestHandler):
         if code != 304:
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
+        if self.route() == "/state":
+            # What this takes in a request body (RFC 7694): a phone sends its copy gzipped only
+            # to a server that says so, as one from before would refuse it.
+            self.send_header("Accept-Encoding", "gzip")
         for k, v in (headers or {}).items():
             self.send_header(k, v)
         self.end_headers()
@@ -487,6 +494,28 @@ class Handler(BaseHTTPRequestHandler):
             self.send(413, "body missing or too large")
             return None
         return length
+
+    def unpacked(self, raw):
+        """[raw] as the phone wrote it, gunzipped if it came so; None once an error has been answered."""
+        coding = (self.headers.get("Content-Encoding") or "identity").strip().lower()
+        if coding == "identity":
+            return raw
+        if coding != "gzip":
+            self.send(415, "Content-Encoding must be gzip or none")
+            return None
+        # Unpacked only up to MAX_BODY: a few kilobytes of gzip can unpack to gigabytes.
+        unpack = zlib.decompressobj(wbits=16 + zlib.MAX_WBITS)
+        try:
+            out = unpack.decompress(raw, MAX_BODY + 1)
+        except zlib.error:
+            out = None
+        if out is None or (not unpack.eof and len(out) <= MAX_BODY):
+            self.send(400, "bad gzip")
+            return None
+        if len(out) > MAX_BODY:
+            self.send(413, "body missing or too large")
+            return None
+        return out
 
     def login(self):
         addr = client_address(self)
@@ -575,6 +604,9 @@ class Handler(BaseHTTPRequestHandler):
             # drops. What came is no document, so it isn't read as one.
             self.close_connection = True
             return self.send(400, "the upload stopped short")
+        raw = self.unpacked(raw)
+        if raw is None:
+            return
         try:
             data = json.loads(raw)
             if not isinstance(data, dict) or not isinstance(data.get("bills"), list):
