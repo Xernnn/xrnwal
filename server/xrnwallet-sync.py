@@ -417,6 +417,16 @@ class Handler(BaseHTTPRequestHandler):
         who = headers.get("X-Forwarded-For", self.client_address[0]) if headers else "-"
         sys.stderr.write(f"{who} {fmt % a}".translate(LOG_ESCAPES) + "\n")
 
+    def handle(self):
+        # A caller hanging up, mid-upload or before the answer is out, is the network, not a fault
+        # here: a phone loses its signal or its VPN reconnects. One line says so. socketserver
+        # printed some 30 lines of traceback for each, which xrnhub's log page shows as an error.
+        try:
+            super().handle()
+        except ConnectionError as e:
+            self.close_connection = True
+            self.log_message("connection dropped: %s", type(e).__name__)
+
     def parse_request(self):
         if not super().parse_request():
             return False
@@ -560,6 +570,11 @@ class Handler(BaseHTTPRequestHandler):
         if length is None:
             return
         raw = self.rfile.read(length)
+        if len(raw) < length:
+            # The connection closed part way: Funnel cuts this side off when the phone's side
+            # drops. What came is no document, so it isn't read as one.
+            self.close_connection = True
+            return self.send(400, "the upload stopped short")
         try:
             data = json.loads(raw)
             if not isinstance(data, dict) or not isinstance(data.get("bills"), list):

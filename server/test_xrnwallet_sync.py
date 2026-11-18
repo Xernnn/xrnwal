@@ -10,6 +10,7 @@ import io
 import json
 import os
 import socket
+import struct
 import tempfile
 import threading
 import time
@@ -317,6 +318,45 @@ class SyncServerTest(unittest.TestCase):
         deep = b'{"bills":' + b"[" * 100_000 + b"]" * 100_000 + b"}"
         status, body, _ = self.call("PUT", "/state", deep, {"If-Match": '"0"'}, raw=True)
         self.assertEqual(status, 400)
+        self.assertEqual(self.call("GET", "/state")[2]["ETag"], '"0"')
+
+    def cut_upload(self, reset):
+        """A PUT /state whose body stops half way, then the connection closes, as Funnel closes
+        it when the phone's side drops: with [reset], hard, before any answer can come back."""
+        body = json.dumps(document("a" * 4000)).encode()
+        login = base64.b64encode(f"owner:{RIGHT}".encode())
+        head = (b"PUT /state HTTP/1.1\r\nHost: x\r\nAuthorization: Basic " + login +
+                b'\r\nIf-Match: "0"\r\nContent-Length: ' + str(len(body)).encode() + b"\r\n\r\n")
+        with unittest.mock.patch("sys.stderr", new_callable=io.StringIO) as log:
+            with socket.create_connection(("127.0.0.1", self.httpd.server_address[1]), timeout=10) as s:
+                s.sendall(head + body[:len(body) // 2])
+                if reset:
+                    s.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
+                    answer = b""
+                else:
+                    s.shutdown(socket.SHUT_WR)
+                    answer = b"".join(iter(lambda: s.recv(4096), b""))
+            for _ in range(300):  # the handler finishes on its own thread
+                if any(word in log.getvalue() for word in ("dropped", "Traceback", '" 400 ')):
+                    break
+                time.sleep(0.01)
+            time.sleep(0.1)
+        return answer, log.getvalue()
+
+    def test_an_upload_cut_short_is_answered_as_such_and_writes_nothing(self):
+        # The phone's connection dropped part way through an upload (six times in two days). The
+        # half that came was parsed as a document, and the 400 said the body must be {"bills": ...}.
+        answer, log = self.cut_upload(reset=False)
+        self.assertRegex(answer, rb"^HTTP/1\.[01] 400 ")
+        self.assertIn(b"the upload stopped short", answer)
+        self.assertNotIn("Traceback", log)
+        self.assertEqual(self.call("GET", "/state")[2]["ETag"], '"0"')
+
+    def test_a_caller_that_hangs_up_is_one_line_in_the_log_not_a_traceback(self):
+        # socketserver printed a traceback for each, which xrnhub's log page counts as an error.
+        _, log = self.cut_upload(reset=True)
+        self.assertNotIn("Traceback", log)
+        self.assertIn("connection dropped: ConnectionResetError", log)
         self.assertEqual(self.call("GET", "/state")[2]["ETag"], '"0"')
 
     def test_the_log_shows_a_callers_control_characters_escaped(self):
