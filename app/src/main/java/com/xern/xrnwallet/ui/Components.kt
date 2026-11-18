@@ -594,8 +594,7 @@ class BillUndo(private val repo: Repository, private val scope: CoroutineScope) 
 
     fun copyToToday(bill: Bill, tagIds: List<Long>) {
         scope.launch {
-            val copy = bill.copy(id = 0, atMillis = System.currentTimeMillis(), recurringId = null)
-            val id = repo.saveBill(copy, tagIds)
+            val id = repo.saveBill(repo.snapshot.value.againToday(bill, System.currentTimeMillis()), tagIds)
             offer("Added again for today") { repo.deleteBill(id) }
         }
     }

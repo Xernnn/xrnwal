@@ -93,7 +93,7 @@ fun BudgetScreen() {
     ) {
         ScrollBody {
             if (!settings.budgetEnabled) {
-                Panel { Muted("Budget is off. Turn it on to see it on the home page.", Modifier.padding(16.dp)) }
+                Panel { Muted("Budget is off", Modifier.padding(16.dp)) }
             } else {
                 Panel {
                     Column(Modifier.padding(16.dp)) {

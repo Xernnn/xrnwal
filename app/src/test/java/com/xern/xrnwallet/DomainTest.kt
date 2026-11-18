@@ -527,6 +527,101 @@ class DomainTest {
     }
 
     @Test
+    fun aCorrectedBalanceReadsWhatWasTypedWithABillDatedNextWeek() {
+        val savings = Account(id = 1, name = "Savings", currency = "AUD", openingCents = 100_000)
+        val now = 1_000_000L
+        val week = 7 * 24 * 60 * 60 * 1000L
+        val bought = Bill(id = 1, ledgerId = 1, type = BillType.EXPENSE, accountId = 1, amountCents = 5_000, currency = "AUD", atMillis = now - week)
+        val rent = Bill(id = 2, ledgerId = 1, type = BillType.EXPENSE, accountId = 1, amountCents = 10_000, currency = "AUD", atMillis = now + week)
+        val s = Snapshot(accounts = listOf(savings), bills = listOf(bought, rent))
+        // 1000 - 50 - next week's 100.
+        assertEquals(85_000L, s.balance(savings))
+
+        // Typed 1000: that is what the account shows, next week's rent and all.
+        val correction = s.correction(savings, wanted = 100_000, atMillis = now)
+        val corrected = s.copy(adjustments = listOf(correction))
+        assertEquals(100_000L, corrected.balance(savings))
+        assertEquals(15_000L, correction.differenceCents)
+        // Held at its own moment, before next week's rent.
+        assertEquals(95_000L, correction.beforeCents)
+        assertEquals(110_000L, correction.afterCents)
+
+        // A bill added later, dated between the correction and the rent, still counts.
+        val coffee = Bill(id = 3, ledgerId = 1, type = BillType.EXPENSE, accountId = 1, amountCents = 500, currency = "AUD", atMillis = now + 1_000)
+        assertEquals(99_500L, corrected.copy(bills = listOf(bought, rent, coffee)).balance(savings))
+
+        // A second correction on top of the first reads as typed too.
+        val again = corrected.correction(savings, wanted = 120_000, atMillis = now + 2_000)
+        assertEquals(120_000L, corrected.copy(adjustments = listOf(correction, again)).balance(savings))
+        assertEquals(20_000L, again.differenceCents)
+
+        // With nothing dated later, it is what was typed.
+        val plain = Snapshot(accounts = listOf(savings), bills = listOf(bought)).correction(savings, wanted = 90_000, atMillis = now)
+        assertEquals(95_000L, plain.beforeCents)
+        assertEquals(90_000L, plain.afterCents)
+    }
+
+    @Test
+    fun aCorrectedAccountMovedToAnotherCurrencyReadsTheBalanceTyped() {
+        // One pound is two dollars.
+        val rates = listOf(CurrencyRate("GBP", 2.0))
+        val wallet = Account(id = 1, name = "Wallet", currency = "AUD")
+        fun bill(id: Long, at: Long, cents: Long, type: Int) =
+            Bill(id = id, ledgerId = 1, type = type, accountId = 1, amountCents = cents, currency = "AUD", atMillis = at)
+        val paid = bill(1, at = 1_000, cents = 50_000, type = BillType.INCOME)
+        val spent = bill(2, at = 3_000, cents = 10_000, type = BillType.EXPENSE)
+        val correction = BalanceAdjustment(id = 5, accountId = 1, atMillis = 2_000, beforeCents = 50_000, afterCents = 100_000)
+        val s = Snapshot(accounts = listOf(wallet), bills = listOf(paid, spent), rates = rates, baseCurrency = "AUD", adjustments = listOf(correction))
+        assertEquals(90_000L, s.balance(wallet))
+
+        fun applied(change: com.xern.xrnwallet.data.CurrencyChange) = s.copy(
+            accounts = listOf(change.account),
+            bills = s.bills.map { b -> change.bills.firstOrNull { it.id == b.id } ?: b },
+            adjustments = change.adjustments,
+        )
+
+        // $900 is £450: the correction is converted with the rest, and nothing more is needed.
+        val converted = s.changeCurrency(wallet, "GBP", wanted = 45_000, atMillis = 4_000)
+        assertEquals(45_000L, applied(converted).balance(converted.account))
+        assertEquals(listOf(correction.copy(beforeCents = 25_000, afterCents = 50_000)), converted.adjustments)
+
+        // £500 typed with the change: a new correction makes it so.
+        val typed = s.changeCurrency(wallet, "GBP", wanted = 50_000, atMillis = 4_000)
+        assertEquals(50_000L, applied(typed).balance(typed.account))
+        assertEquals(BalanceAdjustment(accountId = 1, atMillis = 4_000, beforeCents = 45_000, afterCents = 50_000), typed.adjustments.last())
+
+        // Without a correction the opening balance carries it, as before: 600 kept as £600.
+        val plain = Snapshot(accounts = listOf(wallet.copy(openingCents = 10_000)), bills = listOf(paid), rates = rates, baseCurrency = "AUD")
+        val kept = plain.changeCurrency(wallet.copy(openingCents = 10_000), "GBP", wanted = 60_000, atMillis = 4_000)
+        assertEquals(35_000L, kept.account.openingCents)
+        assertEquals(emptyList<BalanceAdjustment>(), kept.adjustments)
+    }
+
+    @Test
+    fun aBillAddedAgainTodayTakesTodaysRate() {
+        // One US dollar was 1.40 last year and is 1.50 today.
+        val s = Snapshot(
+            accounts = listOf(Account(id = 1, name = "Bank", currency = "AUD")),
+            rates = listOf(CurrencyRate("USD", 1.5), CurrencyRate("EUR", 1.6)),
+            baseCurrency = "AUD",
+        )
+        val lastYear = Bill(
+            id = 9, ledgerId = 1, type = BillType.EXPENSE, accountId = 1, amountCents = 10_000, currency = "USD",
+            rate = 1.4, toAmountCents = 14_000, atMillis = 1_000, recurringId = 3,
+        )
+        val now = 2_000_000_000_000L
+        val again = s.againToday(lastYear, now)
+        assertEquals(1.5, again.rate, 0.0)
+        assertEquals(15_000L, again.toAmountCents)
+        assertEquals(15_000L, again.baseCents)
+        assertEquals(listOf(0L, now, null), listOf(again.id, again.atMillis, again.recurringId))
+        // A currency with no rate left here keeps the one it had, rather than counting one to one.
+        assertEquals(1.2, s.againToday(lastYear.copy(currency = "GBP", rate = 1.2, toAmountCents = 12_000), now).rate, 0.0)
+        // In the account's own currency nothing is fixed.
+        assertNull(s.againToday(lastYear.copy(currency = "AUD", rate = 1.0, toAmountCents = null), now).toAmountCents)
+    }
+
+    @Test
     fun aDepositRaisesItsReceiveAccountOnly() {
         val into = Account(id = 1, name = "Savings", currency = "AUD")
         val other = Account(id = 2, name = "Cash", currency = "AUD")

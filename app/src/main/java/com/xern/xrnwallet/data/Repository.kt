@@ -20,14 +20,20 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.doubleOrNull
 import java.io.File
+import java.io.InputStream
+import java.io.OutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.util.Base64
 
-/** Written into every backup and server copy. Raise it when an older app couldn't read the newer shape. */
-const val BACKUP_VERSION = 2
+/**
+ * Written into every backup and server copy. Raise it when an older app couldn't read the newer shape,
+ * or would drop part of it and send the copy back without. 3: the day a reminder counts from, and the
+ * offset from UTC each bill and correction was entered at.
+ */
+const val BACKUP_VERSION = 3
 
 @Serializable
 data class Backup(
@@ -75,6 +81,9 @@ object BackupReader {
             ?: backup.reminders.firstNotNullOfOrNull { it.problem() }
             // A rate is divided by. Zero gives infinity, which the Currencies page can't show and sync can't send.
             ?: backup.rates.firstOrNull { !(it.rate.isFinite() && it.rate > 0) }?.let { "${it.code} has a rate of ${it.rate}" }
+            // Every list of bills works out their dates, which no offset beyond a zone's can give.
+            ?: backup.bills.firstNotNullOfOrNull { offsetProblem("a bill", it.offsetSeconds) }
+            ?: backup.adjustments.firstNotNullOfOrNull { offsetProblem("a balance correction", it.offsetSeconds) }
         if (problem != null) throw UnusableBackup(problem)
         return backup
     }
@@ -243,9 +252,9 @@ class Repository(
         }
     }
 
-    /** Records that [account] really holds [afterCents] now, where the bills give [beforeCents]. */
-    fun adjustBalance(account: Account, beforeCents: Long, afterCents: Long) = launchIo {
-        dao.put(BalanceAdjustment(accountId = account.id, atMillis = System.currentTimeMillis(), beforeCents = beforeCents, afterCents = afterCents))
+    /** Records that [account] really holds [wanted] now, as [Snapshot.correction] in [s] works it out. */
+    fun adjustBalance(s: Snapshot, account: Account, wanted: Long) = launchIo {
+        dao.put(s.correction(account, wanted, System.currentTimeMillis()))
     }
 
     fun deleteAdjustment(adjustment: BalanceAdjustment) = launchIo { dao.delete(adjustment) }
@@ -271,9 +280,10 @@ class Repository(
         }
     }
 
+    /** Sets the alarm of the one saved only; the others keep theirs. */
     fun saveReminder(reminder: Reminder) = launchIo {
-        dao.put(reminder)
-        Reminders.scheduleAll(context, dao.remindersNow())
+        val id = dao.put(reminder)
+        Reminders.schedule(context, reminder.copy(id = id))
     }
 
     fun deleteReminder(reminder: Reminder) = launchIo {
@@ -334,7 +344,7 @@ class Repository(
             val categories = dao.categoriesNow().toMutableList()
             val tags = dao.tagsNow().associateBy { it.name.lowercase() }.toMutableMap()
             val rates = dao.ratesNow().associateBy { it.code }.toMutableMap()
-            val existing = AlreadyStored(dao.billsNow().map { fingerprint(it.atMillis, it.amountCents, it.note, it.type) })
+            val existing = AlreadyStored(dao.billsNow().map { BillCsv.fingerprint(it.dateTime, it.amountCents, it.note, it.type) })
             val accountCurrencies = BillCsv.accountCurrencies(rows, base)
 
             suspend fun ledgerFor(name: String): Ledger {
@@ -366,7 +376,7 @@ class Repository(
             var added = 0
             for (row in rows) {
                 val millis = BillCsv.millisOf(row.at)
-                if (existing.claim(fingerprint(millis, row.cents, row.note, row.type))) continue
+                if (existing.claim(BillCsv.fingerprint(row.at, row.cents, row.note, row.type))) continue
                 val parent = if (row.type == BillType.TRANSFER) null else categoryFor(row.category, row.type, null)
                 val category = if (parent != null && row.subcategory.isNotBlank()) {
                     categoryFor(row.subcategory, row.type, parent.id)
@@ -409,14 +419,11 @@ class Repository(
         }
     }
 
-    /** Whole seconds, because that is all an exported file keeps. */
-    private fun fingerprint(millis: Long, cents: Long, note: String, type: Int) =
-        "${millis / 1000}|$cents|$note|$type"
-
-    suspend fun backup(): String = withContext(Dispatchers.IO) {
+    /** Writes a backup file to [out]: everything, photos included, a photo at a time. See [BackupFile]. */
+    suspend fun backup(out: OutputStream) = withContext(Dispatchers.IO) {
         val bills = dao.billsNow()
-        val encoder = Base64.getEncoder()
-        json.encodeToString(
+        BackupFile.write(
+            out,
             Backup(
                 settings = store.export(),
                 ledgers = dao.ledgersNow(),
@@ -433,11 +440,27 @@ class Repository(
                 checklistItems = dao.checklistItemsNow(),
                 reminders = dao.remindersNow(),
                 rates = dao.ratesNow(),
-                photos = bills.mapNotNull { it.photo }.map(::File).filter(File::exists)
-                    .associate { it.name to encoder.encodeToString(it.readBytes()) },
                 adjustments = dao.adjustmentsNow(),
             ),
+            bills.mapNotNull { it.photo }.map(::File).filter(File::exists),
         )
+    }
+
+    /** Where a backup file's photos wait between [readBackup] and [restore]. */
+    private val stagedPhotos: File get() = File(context.cacheDir, "restore-photos")
+
+    /**
+     * Reads a backup file from [input], its photos into a folder of their own, and returns the rest once
+     * [BackupReader] takes it, for [restore]. Nothing here changes; a file refused leaves nothing behind.
+     */
+    suspend fun readBackup(input: InputStream): String = withContext(Dispatchers.IO) {
+        val folder = stagedPhotos.apply { deleteRecursively(); mkdirs() }
+        try {
+            BackupFile.read(input, folder).also { BackupReader.read(it) }
+        } catch (e: Exception) {
+            folder.deleteRecursively()
+            throw e
+        }
     }
 
     /**
@@ -480,9 +503,16 @@ class Repository(
         PhotoFiles.sweep(File(context.filesDir, "photos"), dao.billsNow(), System.currentTimeMillis())
     }
 
-    /** Replaces everything with a backup file. This phone keeps its own app lock, as a file holds none. */
+    /**
+     * Replaces everything with a backup file [readBackup] read, and its photos. This phone keeps its own
+     * app lock, as a file holds none.
+     */
     suspend fun restore(text: String) {
-        replace(text, expected = null)
+        try {
+            replace(text, expected = null, staged = stagedPhotos)
+        } finally {
+            withContext(Dispatchers.IO) { stagedPhotos.deleteRecursively() }
+        }
     }
 
     /** For [SyncedWallet.replaceWith]: a server copy, which leaves the app lock out, so this phone keeps its own. */
@@ -493,13 +523,17 @@ class Repository(
      * fully parsed and checked by [BackupReader] before anything is deleted. With [expected], only
      * while the document here still hashes to it, else null with nothing replaced. The check, the
      * change and the new hash are one transaction, so a bill saved meanwhile waits for it and lands
-     * after, still to be sent.
+     * after, still to be sent. The photo files in [staged] move in first.
      */
-    private suspend fun replace(text: String, expected: String?): String? = withContext(Dispatchers.IO) {
+    private suspend fun replace(text: String, expected: String?, staged: File? = null): String? = withContext(Dispatchers.IO) {
         val backup = BackupReader.read(text)
         val decoder = Base64.getDecoder()
         val photos = backup.photos.mapValues { decoder.decode(it.value) }
         val folder = File(context.filesDir, "photos").apply { mkdirs() }
+        staged?.listFiles().orEmpty().forEach { photo ->
+            val into = File(folder, photo.name)
+            if (!photo.renameTo(into)) photo.copyTo(into, overwrite = true)
+        }
         // Names come from the file, so only the last part of each is ever used as a path.
         photos.forEach { (name, bytes) -> File(folder, File(name).name).writeBytes(bytes) }
         val hash = db.withTransaction {

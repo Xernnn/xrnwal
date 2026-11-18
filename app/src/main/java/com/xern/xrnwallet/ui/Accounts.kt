@@ -187,7 +187,6 @@ fun AccountDetailScreen(id: Long) {
             initial = Calculator.format(Money.fromCents(current)),
             numeric = true,
             placeholder = "Real balance",
-            below = { Muted(ADJUSTMENT_NOTE, Modifier.padding(top = 10.dp)) },
             onDismiss = { corrected = false },
         ) { text ->
             val wanted = f.parse(text, account.currency)
@@ -196,7 +195,7 @@ fun AccountDetailScreen(id: Long) {
                 return@InputDialog
             }
             corrected = false
-            if (wanted != current) repo.adjustBalance(account, current, wanted)
+            if (wanted != current) repo.adjustBalance(s, account, wanted)
         }
     }
     if (confirm) {
@@ -278,7 +277,6 @@ fun AccountEditScreen(id: Long) {
                 WalletField(name, { name = it }, Modifier.padding(start = 12.dp).weight(1f), "Account name")
             }
             AmountField("Current balance", balance) { balance = it }
-            if (existing != null) Muted(ADJUSTMENT_NOTE, Modifier.padding(horizontal = 4.dp))
             Panel {
                 ListRow("Currency", currency) { pickCurrency = true }
                 Divider()
@@ -296,7 +294,7 @@ fun AccountEditScreen(id: Long) {
                 // currency alone keeps the number shown, as before.
                 if (existing != null && currency == existing.currency) {
                     val current = s.balance(existing)
-                    if (balance != shownBalance && wanted != current) repo.adjustBalance(existing, current, wanted)
+                    if (balance != shownBalance && wanted != current) repo.adjustBalance(s, existing, wanted)
                     repo.save {
                         put(
                             existing.copy(
@@ -312,15 +310,10 @@ fun AccountEditScreen(id: Long) {
                     nav.leavePage()
                     return@PrimaryButton
                 }
-                val base = existing ?: Account(name = name.trim(), sort = s.accounts.size)
-                // What bills fixed in its old currency put there is re-expressed in the new one.
-                val refixed = existing?.let { s.fixedAmountsIn(it, currency) }.orEmpty().associateBy { it.id }
-                // Measured in the currency being saved, so changing currency and balance together comes out right.
-                val movement = if (existing != null) {
-                    s.copy(bills = s.bills.map { refixed[it.id] ?: it }).balance(existing.copy(currency = currency)) - existing.openingCents
-                } else {
-                    0
-                }
+                // Measured in the currency being saved, so changing currency and balance together comes out
+                // right, corrected or not. See Snapshot.changeCurrency.
+                val change = existing?.let { s.changeCurrency(it, currency, wanted, System.currentTimeMillis()) }
+                val base = change?.account ?: Account(name = name.trim(), sort = s.accounts.size, currency = currency, openingCents = wanted)
                 repo.save {
                     putAccount(
                         base.copy(
@@ -328,12 +321,11 @@ fun AccountEditScreen(id: Long) {
                             kind = kind,
                             icon = icon,
                             color = color,
-                            currency = currency,
-                            openingCents = wanted - movement,
                             note = note.trim(),
                             includeInTotal = included,
                         ),
-                        refixed.values.toList(),
+                        change?.bills.orEmpty(),
+                        change?.adjustments.orEmpty(),
                     )
                 }
                 nav.leavePage()
@@ -405,7 +397,3 @@ fun AdjustmentScreen(id: Long) {
         }
     }
 }
-
-/** Said where a balance is corrected, as the reference says it the first time. */
-private const val ADJUSTMENT_NOTE =
-    "A changed balance is kept as a correction in the account's history. Bills dated before it no longer change the balance; deleting the correction undoes it."

@@ -12,6 +12,21 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
+import java.time.ZoneOffset
+
+/** The offset from UTC, in seconds, of the phone's time zone at [atMillis]. */
+fun localOffset(atMillis: Long): Int = ZoneId.systemDefault().rules.getOffset(Instant.ofEpochMilli(atMillis)).totalSeconds
+
+/** [atMillis] as the date and time it was where the offset from UTC was [offsetSeconds]. */
+private fun localTime(atMillis: Long, offsetSeconds: Int): LocalDateTime =
+    LocalDateTime.ofInstant(Instant.ofEpochMilli(atMillis), ZoneOffset.ofTotalSeconds(offsetSeconds))
+
+/** The most a zone is ahead of or behind UTC. */
+private val OFFSETS = -18 * 3600..18 * 3600
+
+/** Why a time stored with [offsetSeconds] can't be read, or null. */
+fun offsetProblem(what: String, offsetSeconds: Int): String? =
+    if (offsetSeconds in OFFSETS) null else "$what is dated $offsetSeconds seconds from UTC"
 
 object BillType {
     const val EXPENSE = 0
@@ -112,10 +127,14 @@ data class Bill(
     val atMillis: Long,
     val inBudget: Boolean = true,
     val recurringId: Long? = null,
+    /**
+     * The offset from UTC where the bill was entered, so it keeps its date and time when the phone is in
+     * another time zone. A bill from a copy made before it had this was entered where it is first read.
+     */
+    val offsetSeconds: Int = localOffset(atMillis),
 ) {
     val baseCents: Long get() = Money.convert(amountCents, rate)
-    val dateTime: LocalDateTime
-        get() = LocalDateTime.ofInstant(Instant.ofEpochMilli(atMillis), ZoneId.systemDefault())
+    val dateTime: LocalDateTime get() = localTime(atMillis, offsetSeconds)
     val date: LocalDate get() = dateTime.toLocalDate()
 }
 
@@ -291,10 +310,11 @@ data class BalanceAdjustment(
     val atMillis: Long,
     val beforeCents: Long,
     val afterCents: Long,
+    /** As [Bill.offsetSeconds]. */
+    val offsetSeconds: Int = localOffset(atMillis),
 ) {
     val differenceCents: Long get() = afterCents - beforeCents
-    val dateTime: LocalDateTime
-        get() = LocalDateTime.ofInstant(Instant.ofEpochMilli(atMillis), ZoneId.systemDefault())
+    val dateTime: LocalDateTime get() = localTime(atMillis, offsetSeconds)
     val date: LocalDate get() = dateTime.toLocalDate()
 }
 
@@ -327,10 +347,20 @@ data class Reminder(
     val title: String = "Time to record your accounts",
     val body: String = "Record one now",
     val enabled: Boolean = true,
+    /**
+     * The day it counts from: a weekly one comes on its weekday, a monthly one on its day of the month.
+     * One from a copy made before it had this counts from the day it is read.
+     */
+    val startEpochDay: Long = LocalDate.now().toEpochDay(),
 ) {
+    val start: LocalDate get() = LocalDate.ofEpochDay(startEpochDay)
+
     /** As [Recurring.problem]: its next time is worked out for every reminder after a restore and each boot. */
-    fun problem(): String? =
-        if (minuteOfDay !in 0 until MINUTES_IN_DAY) "a reminder is set for minute $minuteOfDay of the day" else null
+    fun problem(): String? = when {
+        minuteOfDay !in 0 until MINUTES_IN_DAY -> "a reminder is set for minute $minuteOfDay of the day"
+        startEpochDay !in CALENDAR -> "a reminder starts on no date the calendar has"
+        else -> null
+    }
 }
 
 /** A billing currency. [rate] is one unit expressed in the base currency. */

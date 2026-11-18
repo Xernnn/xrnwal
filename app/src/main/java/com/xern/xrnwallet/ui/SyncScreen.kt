@@ -87,7 +87,6 @@ private fun ConnectPanel(sync: SyncManager) {
             }
         }
     }
-    Muted("Keeps a copy of this phone's data on your own server, instead of Google Drive.")
 }
 
 @Composable
@@ -104,7 +103,7 @@ private fun ConnectedPanel(sync: SyncManager, status: SyncStatus) {
         Divider()
         SwitchRow("Sync photo", status.photos, onChange = sync::setPhotos)
         Divider()
-        ListRow("Earlier copies", subtitle = "Go back to a copy the server kept") { nav.navigate("sync/earlier") }
+        ListRow("Earlier copies") { nav.navigate("sync/earlier") }
         Divider()
         ListRow("Disconnect") { leaving = true }
     }
@@ -112,7 +111,6 @@ private fun ConnectedPanel(sync: SyncManager, status: SyncStatus) {
     PrimaryButton(if (status.running) "Syncing…" else "Sync now", Modifier.fillMaxWidth(), enabled = !status.running) {
         scope.launch { sync.syncNow() }
     }
-    Muted("The server keeps your last 20 changes and one copy a day for 60 days. The app lock stays on this phone.")
     if (leaving) {
         ConfirmDialog(
             "Disconnect from the server?",
@@ -137,10 +135,7 @@ private fun ConflictDialog(sync: SyncManager, conflict: SyncOutcome.Conflict) {
             style = MaterialTheme.typography.titleMedium,
         )
         Spacer(Modifier.height(10.dp))
-        Muted(
-            "The server's copy is from ${whenText(conflict.updated)}. Choose which to keep. Your other phones " +
-                "follow the one you keep, and the other stays on the server under Earlier copies.",
-        )
+        Muted("The server's copy is from ${whenText(conflict.updated)}.")
         Spacer(Modifier.height(16.dp))
         PrimaryButton("Use the server's copy", Modifier.fillMaxWidth()) { sync.resolve(useServer = true) }
         Spacer(Modifier.height(8.dp))

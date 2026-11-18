@@ -50,6 +50,7 @@ class SyncServerTest(unittest.TestCase):
         srv.args = type("Args", (), {"data": self.data, "users": users})()
         srv.FAIL_DELAY_S = 0
         srv.failures.clear()
+        srv.checking.clear()
         srv.pruned.clear()
         srv.auth_cache.clear()
         self.httpd = LoopbackServer(("127.0.0.1", 0), srv.Handler)
@@ -237,6 +238,29 @@ class SyncServerTest(unittest.TestCase):
         body = json.loads(self.call("GET", f"/versions/{oldest['id']}")[1])
         self.assertEqual(body["bills"][0]["note"], "first of the day")
 
+    def test_a_copy_replaced_after_a_rollback_stays_in_the_history(self):
+        # state.json put back by hand from the day's first copy, version 1, while the history held
+        # 5 to 24. The copy the next write replaced was filed as 1.json and, the lowest number,
+        # deleted at once; until the version passed 24, every replaced copy went the same way.
+        self.put(document("first of the day"), '"0"')
+        for i in range(1, srv.KEEP_VERSIONS + 5):
+            self.put(document(f"change {i}"), f'"{i}"')
+        history = os.path.join(self.data, "users", "owner", "history")
+        self.assertEqual(sorted(int(n[:-5]) for n in os.listdir(history)), list(range(5, 25)))
+        daily = os.path.join(self.data, "users", "owner", "daily")
+        day = os.listdir(daily)[0]
+        with open(os.path.join(daily, day), encoding="utf-8") as f:
+            first = f.read()
+        with open(os.path.join(self.data, "users", "owner", "state.json"), "w", encoding="utf-8") as f:
+            f.write(first)
+        self.assertEqual(self.put(document("after the rollback"), '"1"')[0], 200)
+        # The oldest filed goes instead: 5.json.
+        self.assertEqual(sorted(int(n[:-5]) for n in os.listdir(history)), [1] + list(range(6, 25)))
+        self.assertEqual(self.put(document("and again"), '"2"')[0], 200)
+        self.assertEqual(sorted(int(n[:-5]) for n in os.listdir(history)), [1, 2] + list(range(7, 25)))
+        body = json.loads(self.call("GET", "/versions/1")[1])
+        self.assertEqual(body["bills"][0]["note"], "first of the day")
+
     def test_no_earlier_copies_is_an_empty_list(self):
         status, body, _ = self.call("GET", "/versions")
         self.assertEqual((status, json.loads(body)), (200, []))
@@ -286,6 +310,14 @@ class SyncServerTest(unittest.TestCase):
         with socket.create_connection(("127.0.0.1", self.httpd.server_address[1]), timeout=10) as s:
             s.sendall(b"GARBAGE\r\n\r\n")
             self.assertIn(b"400", s.recv(200))
+
+    def test_a_document_nested_too_deep_is_refused_with_an_answer(self):
+        # json.loads raises RecursionError, not ValueError: the handler thread died with a traceback
+        # in the log and the connection closed with no answer.
+        deep = b'{"bills":' + b"[" * 100_000 + b"]" * 100_000 + b"}"
+        status, body, _ = self.call("PUT", "/state", deep, {"If-Match": '"0"'}, raw=True)
+        self.assertEqual(status, 400)
+        self.assertEqual(self.call("GET", "/state")[2]["ETag"], '"0"')
 
     def test_the_log_shows_a_callers_control_characters_escaped(self):
         # The request line and X-Forwarded-For are the caller's. Written raw, an escape sequence
@@ -361,7 +393,7 @@ class SyncServerTest(unittest.TestCase):
             start = time.monotonic()
             status = self.call("GET", "/state", password=password, headers={"X-Forwarded-For": addr})[0]
             return status, time.monotonic() - start
-        srv.failures["203.0.113.61"] = [time.monotonic()] * srv.FAIL_LIMIT  # locked out
+        srv.failures["203.0.113.61"] = [(time.monotonic(), "owner")] * srv.FAIL_LIMIT  # locked out
         srv.FAIL_DELAY_S = 0.5
         try:
             for addr, status in (("203.0.113.60", 401), ("203.0.113.61", 429)):
@@ -397,6 +429,61 @@ class SyncServerTest(unittest.TestCase):
             srv.check_login = real
         self.assertEqual((codes.count(401), codes.count(429)), (srv.FAIL_LIMIT, tries - srv.FAIL_LIMIT))
         self.assertEqual(self.call("GET", "/state", password=RIGHT)[0], 429)
+
+    def guess_as(self, name, password, addr):
+        return self.call("GET", "/state", password=password, user=name, headers={"X-Forwarded-For": addr})[0]
+
+    def test_a_right_login_clears_only_its_own_users_mistakes(self):
+        # A login for one account wiped the whole address's count: guesses at another name from
+        # the same address started over with every login of the first.
+        addr = "203.0.113.80"
+        for _ in range(5):
+            self.assertEqual(401, self.guess_as("other", "nope", addr))
+        for _ in range(4):
+            self.assertEqual(401, self.guess_as("owner", "nope", addr))
+        srv.auth_cache.clear()
+        self.assertEqual(200, self.guess_as("owner", RIGHT, addr))  # owner's four go, other's five stay
+        for _ in range(srv.FAIL_LIMIT - 5):
+            self.assertEqual(401, self.guess_as("other", "nope", addr))
+        self.assertEqual(429, self.guess_as("other", "nope", addr))
+
+    def test_a_phone_sending_the_password_it_had_clears_nothing(self):
+        # The phone sends its password with every request. Behind the same address as a guesser
+        # (home Wi-Fi, a carrier's shared address) it cleared the guesser's count at every sync,
+        # so the guesses never ran out. A password already found right (the auth cache) is a
+        # session, not a login.
+        addr = "203.0.113.81"
+        self.assertEqual(200, self.guess_as("owner", RIGHT, addr))  # the phone, signed in
+        for _ in range(srv.FAIL_LIMIT - 1):
+            self.assertEqual(401, self.guess_as("owner", "nope", addr))
+            self.assertEqual(200, self.guess_as("owner", RIGHT, addr))  # it syncs on
+        self.assertEqual(401, self.guess_as("owner", "nope", addr))
+        self.assertEqual(429, self.guess_as("owner", "nope", addr))
+
+    def test_a_login_in_flight_is_not_a_wrong_guess(self):
+        # Counted as wrong before it was checked, a right login being checked took a place: two
+        # phones signing in at once, at an address with a few mistakes behind it, got a 429,
+        # which the app takes for a lockout.
+        addr = "203.0.113.82"
+        real = srv.check_login
+
+        def slow(header):
+            time.sleep(0.3)
+            return real(header)
+
+        with unittest.mock.patch.object(srv, "FAIL_LIMIT", 3):
+            self.assertEqual(401, self.guess_as("owner", "nope", addr))
+            self.assertEqual(401, self.guess_as("owner", "nope", addr))  # one place left
+            srv.auth_cache.clear()
+            start = threading.Barrier(2)
+
+            def login(name):
+                start.wait()
+                return self.guess_as(name, RIGHT, addr)
+
+            with unittest.mock.patch.object(srv, "check_login", slow):
+                with ThreadPoolExecutor(2) as pool:
+                    self.assertEqual([200, 200], list(pool.map(login, ("owner", "other"))))
 
     def test_users_do_not_see_each_others_copies(self):
         self.put(document("mine"), '"0"')

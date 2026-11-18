@@ -97,6 +97,19 @@ data class Snapshot(
     }
 
     /**
+     * [bill] added again at [nowMillis], as a new bill: at today's rate, and with what it puts into an
+     * account in another currency fixed at today's rates, as one entered now would be. A currency with
+     * no rate here any more keeps the rate the bill had, rather than counting one to one with the base.
+     */
+    fun againToday(bill: Bill, nowMillis: Long): Bill {
+        val rate = if (bill.currency == baseCurrency) 1.0 else rateByCode[bill.currency] ?: bill.rate
+        val copy = bill.copy(
+            id = 0, atMillis = nowMillis, offsetSeconds = localOffset(nowMillis), recurringId = null, rate = rate, toAmountCents = null,
+        )
+        return copy.copy(toAmountCents = fixedAmount(copy))
+    }
+
+    /**
      * The bills whose fixed amount is in [account]'s currency, re-expressed for its change to [currency]
      * at today's rates, as the rest of its balance is. A bill in [currency] itself needs none.
      */
@@ -106,6 +119,34 @@ data class Snapshot(
             val kept = bill.toAmountCents ?: 0
             bill.copy(toAmountCents = if (bill.currency == currency) null else Money.convert(kept, rate(account.currency) / rate(currency)))
         }
+    }
+
+    /**
+     * [account] moved to [currency] with a balance there of [wanted], and the rows that change with it:
+     * the bills of [fixedAmountsIn], and every correction of the account, converted at today's rates as
+     * those are. Without a correction, the opening balance is set so the balance reads [wanted]. With
+     * one, the latest correction holds the balance and the opening one counts for nothing, so a new
+     * correction at [atMillis], with id 0, makes it read [wanted] where the converted figure doesn't.
+     */
+    fun changeCurrency(account: Account, currency: String, wanted: Long, atMillis: Long): CurrencyChange {
+        val refixed = fixedAmountsIn(account, currency).associateBy { it.id }
+        val moved = copy(bills = bills.map { refixed[it.id] ?: it })
+        val corrections = adjustmentsOf(account.id)
+        if (corrections.isEmpty()) {
+            val movement = moved.balance(account.copy(currency = currency)) - account.openingCents
+            return CurrencyChange(account.copy(currency = currency, openingCents = wanted - movement), refixed.values.toList(), emptyList())
+        }
+        val factor = rate(account.currency) / rate(currency)
+        val converted = corrections.map {
+            it.copy(beforeCents = Money.convert(it.beforeCents, factor), afterCents = Money.convert(it.afterCents, factor))
+        }.reversed()
+        val changed = account.copy(currency = currency, openingCents = Money.convert(account.openingCents, factor))
+        val after = moved.copy(
+            accounts = accounts.map { if (it.id == account.id) changed else it },
+            adjustments = adjustments.filter { it.accountId != account.id } + converted,
+        )
+        val more = if (after.balance(changed) == wanted) emptyList() else listOf(after.correction(changed, wanted, atMillis))
+        return CurrencyChange(changed, refixed.values.toList(), converted + more)
     }
 
     /** Change a single bill makes to an account, in the account's own currency. */
@@ -151,6 +192,17 @@ data class Snapshot(
             depositsInto(account, latest.atMillis)
     }
 
+    /**
+     * The correction that makes [account]'s balance read [wanted] from [atMillis] on. The balance counts
+     * bills dated after then too, such as next week's rent, so the correction records the balance at its
+     * own moment: [wanted] less what those later bills and deposits do. Before is measured the same way,
+     * so the difference is the change typed, and the balance shown right after is [wanted].
+     */
+    fun correction(account: Account, wanted: Long, atMillis: Long): BalanceAdjustment {
+        val later = bills.filter { it.atMillis > atMillis }.sumOf { effectOn(it, account) } + depositsInto(account, atMillis)
+        return BalanceAdjustment(accountId = account.id, atMillis = atMillis, beforeCents = balance(account) - later, afterCents = wanted - later)
+    }
+
     fun balanceInBase(account: Account): Long = Money.convert(balance(account), rate(account.currency))
 
     fun netAssets(): AssetSummary {
@@ -166,6 +218,9 @@ data class Snapshot(
     fun historyOf(accountId: Long): List<Bill> =
         bills.filter { it.accountId == accountId || it.toAccountId == accountId }
 }
+
+/** The rows [Snapshot.changeCurrency] rewrites. */
+data class CurrencyChange(val account: Account, val bills: List<Bill>, val adjustments: List<BalanceAdjustment>)
 
 data class AssetSummary(val assets: Long, val debts: Long) {
     val net: Long get() = assets + debts

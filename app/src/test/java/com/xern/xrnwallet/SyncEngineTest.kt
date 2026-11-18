@@ -561,4 +561,10 @@ class SyncEngineTest {
         assertEquals("salt", taken.lockSalt)
         assertTrue(taken.biometric)
     }
+
+    @Test fun aWalletTooLargeForTheServerSaysSo() {
+        // Past the server's 8 MB, every upload got 413 and the app said only "answered 413".
+        assertEquals("Too large for the home server.", ServerFailure(413).message)
+        assertFalse(ServerFailure(413).temporary)
+    }
 }

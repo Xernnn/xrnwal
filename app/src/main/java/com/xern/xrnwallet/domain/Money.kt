@@ -33,8 +33,9 @@ object Money {
      * Parses "1234.5", "1234,5", "1.234,50", "1,234.50", "1.234.567" or "1,234,567" into cents, or null.
      * One mark once before exactly three digits, as in "500.000", reads either way. Typed in a field,
      * [decimalMark] is that of the number format chosen, so the other mark is a thousands one, and with
-     * [wholeUnits], for a currency without cents such as the dong, either mark is. With neither, as for a
-     * CSV file, which doesn't say, it is a decimal.
+     * [wholeUnits], for a currency without cents such as the dong, either mark is, in a field or a CSV
+     * row in that currency. With neither, as for a CSV row in a currency with cents, the file not saying
+     * which mark it uses, it is a decimal.
      */
     fun parse(text: String, decimalMark: Char? = null, wholeUnits: Boolean = false): Long? {
         val cleaned = text.trim().replace(" ", "").replace(" ", "")

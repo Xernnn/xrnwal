@@ -341,9 +341,6 @@ fun PasswordScreen() {
                     }
                 }
             }
-            Muted("Set two methods, so you have a fallback. A forgotten password cannot be recovered, and the app would need clearing.")
-            Muted("After five wrong tries the lock waits 30 seconds before the next, and twice as long after each further miss.")
-            Muted("While a lock is set, widgets hide amounts and the recent apps screen shows no preview of this app.")
         }
     }
 }
