@@ -3,6 +3,11 @@ package com.xern.xrnwallet.ui
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.material3.ColorScheme
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.material.icons.filled.KeyboardDoubleArrowDown
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material3.ripple
@@ -266,7 +271,9 @@ fun SwitchRow(title: String, checked: Boolean, subtitle: String? = null, onChang
 fun Glyph(icon: String, size: Dp, tint: Color? = null) {
     val drawing = Art.drawable(icon)
     if (drawing != null) {
-        Image(painterResource(drawing), null, Modifier.size(size))
+        val painter = painterResource(drawing)
+        val edge = Art.isDark(icon) && MaterialTheme.colorScheme.surface.luminance() < 0.5f
+        Image(painter, null, Modifier.size(size).then(if (edge) Modifier.drawBehind { lightEdge(painter) } else Modifier))
         return
     }
     val vector = Art.vector(icon)
@@ -277,22 +284,37 @@ fun Glyph(icon: String, size: Dp, tint: Color? = null) {
     }
 }
 
+/**
+ * A thin light edge around a mostly dark drawing, such as Education's cap, so it keeps its shape on a
+ * dark circle. The circle stays the same grey as every other: these used to get a lighter circle,
+ * which made one category stand out from the rest for no reason.
+ */
+private fun DrawScope.lightEdge(painter: Painter) {
+    val reach = size.minDimension * 0.04f
+    val filter = ColorFilter.tint(Color.White.copy(alpha = 0.4f))
+    repeat(8) { step ->
+        val angle = step * Math.PI / 4
+        translate(reach * kotlin.math.cos(angle).toFloat(), reach * kotlin.math.sin(angle).toFloat()) {
+            with(painter) { draw(size, colorFilter = filter) }
+        }
+    }
+}
+
 /** The icon's own colour, faintly, so a list of categories reads by colour as well as by shape. */
 @Composable
 fun softTint(icon: String): Color =
     Art.tint(icon)?.copy(alpha = 0.16f) ?: MaterialTheme.colorScheme.surfaceVariant
 
 /**
- * What a category's circle is filled with. A colour drawing sits on plain grey, as it brings its own
- * colour, and a mostly dark one on a lighter grey in the dark theme so it doesn't sink into it. A
- * symbol gets its own colour, faintly.
+ * What a category's circle is filled with. Every colour drawing sits on the same plain grey, as it
+ * brings its own colour; a mostly dark one gets a light edge instead (see [Glyph]). A symbol gets its
+ * own colour, faintly.
  */
+fun bubbleColour(icon: String, colors: ColorScheme): Color =
+    if (Art.drawable(icon) == null) Art.tint(icon)?.copy(alpha = 0.16f) ?: colors.surfaceVariant else colors.surfaceVariant
+
 @Composable
-fun bubbleColour(icon: String): Color = when {
-    Art.drawable(icon) == null -> softTint(icon)
-    Art.isDark(icon) && MaterialTheme.colorScheme.surface.luminance() < 0.5f -> Color(0xFF5A5A61)
-    else -> MaterialTheme.colorScheme.surfaceVariant
-}
+fun bubbleColour(icon: String): Color = bubbleColour(icon, MaterialTheme.colorScheme)
 
 /** An icon in a circle. An account passes its own [background], and a symbol on it turns white to suit. */
 @Composable
