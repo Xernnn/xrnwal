@@ -61,6 +61,8 @@ data class Settings(
     val unlockMisses: Int = 0,
     val lastMissAt: Long = 0,
     val ratesUpdatedAt: Long = 0,
+    /** Reports' trend chart squeezed to the card's width, rather than scrolled sideways. */
+    val trendFit: Boolean = false,
 ) {
     val moneyFormat: MoneyFormat
         get() = MoneyFormat(SeparatorStyle.entries[separators], DecimalMode.entries[decimals])
