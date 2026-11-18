@@ -4,12 +4,14 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import kotlinx.serialization.json.Json
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.KeyStore
 import java.util.Base64
+import java.util.zip.GZIPOutputStream
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -67,6 +69,10 @@ class HomeServer(private val login: ServerLogin, private val device: String) : S
     private fun HttpURLConnection.tag(): String = getHeaderField("X-Tag").orEmpty()
     private fun HttpURLConnection.follows(): Boolean = getHeaderField("X-Follows") != "0"
 
+    /** A server says so on its /state answers; one from before reads a gzipped body as a broken document. */
+    private fun HttpURLConnection.takesGzip(): Boolean =
+        getHeaderField("Accept-Encoding").orEmpty().split(',').any { it.trim().equals("gzip", ignoreCase = true) }
+
     private fun HttpURLConnection.copy() = ServerCopy(version(), hash(), text(), updated(), tag(), follows())
 
     private fun failed(connection: HttpURLConnection): Nothing = throw ServerFailure(connection.responseCode)
@@ -90,14 +96,35 @@ class HomeServer(private val login: ServerLogin, private val device: String) : S
         val ifMatch = if (base == SyncServer.ANY_VERSION) base else "\"$base\""
         val headers = mapOf("If-Match" to ifMatch, "Content-Type" to "application/json; charset=utf-8") +
             if (base == SyncServer.ANY_VERSION) emptyMap() else baseTag(tag)
-        return request("/state", "PUT", headers) {
-            it.send(body.toByteArray())
-            when (it.responseCode) {
-                200 -> PushResult.Accepted(it.version(), it.tag())
-                412 -> PushResult.Stale(it.version(), it.hash(), it.updated(), it.tag())
+        val plain = body.toByteArray()
+        // Gzipped, the copy goes up in about a tenth of the bytes (168 KB was 16 KB), so far less of
+        // it is still on the way when the phone's connection drops, and less mobile data goes.
+        return try {
+            put(headers + ("Content-Encoding" to "gzip"), gzip(plain), packed = true)
+        } catch (_: TakesNoGzip) {
+            put(headers, plain, packed = false)
+        }
+    }
+
+    /** A server from before gzipped uploads, which couldn't read one and wrote nothing. */
+    private class TakesNoGzip : Exception()
+
+    private fun put(headers: Map<String, String>, bytes: ByteArray, packed: Boolean): PushResult =
+        request("/state", "PUT", headers) {
+            it.send(bytes)
+            val code = it.responseCode
+            when {
+                code == 200 -> PushResult.Accepted(it.version(), it.tag())
+                code == 412 -> PushResult.Stale(it.version(), it.hash(), it.updated(), it.tag())
+                packed && (code == 400 || code == 415) && !it.takesGzip() -> throw TakesNoGzip()
                 else -> failed(it)
             }
         }
+
+    private fun gzip(bytes: ByteArray): ByteArray {
+        val out = ByteArrayOutputStream(bytes.size / 8 + 64)
+        GZIPOutputStream(out).use { it.write(bytes) }
+        return out.toByteArray()
     }
 
     override fun earlierCopies(): List<EarlierCopy> = request("/versions") {
