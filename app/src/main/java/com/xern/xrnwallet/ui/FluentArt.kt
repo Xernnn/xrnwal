@@ -125,6 +125,3 @@ internal val fluentDrawables: Map<String, Int> = mapOf(
     "🪙" to R.drawable.fe_1fa99,
     "🪴" to R.drawable.fe_1fab4,
 )
-
-/** Drawings mostly darker than 0.32 (0 black, 1 white): on a dark circle they need a lighter one. */
-internal val fluentDark: Set<String> = setOf("🎓", "🎵", "🐾", "🔌")

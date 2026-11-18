@@ -2,7 +2,9 @@
 """Makes the app's colour icons from Microsoft's Fluent Emoji (MIT licence), Flat style.
 
 Every emoji the app's code names (categories offered, defaults, Mine's tiles) gets a vector drawable,
-res/drawable/fe_<code points>.xml, and FluentArt.kt maps the emoji to it. Run it again after adding
+res/drawable/fe_<code points>.xml, and FluentArt.kt maps the emoji to it. A drawing that is mostly
+dark (Education's cap, the music note, paw prints, plug) has its dark fills lightened, so it reads
+on the app's grey circles like the rest. That needs rsvg-convert. Run it again after adding
 an emoji to the code; it fetches only what it doesn't have yet.
 
     python3 -I tools/fluent_icons.py [--cache DIR]
@@ -34,6 +36,10 @@ TREE_URL = "https://api.github.com/repos/microsoft/fluentui-emoji/git/trees/main
 RAW_URL = "https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/"
 SVG = "{http://www.w3.org/2000/svg}"
 DARK_BELOW = 0.32
+# A drawing darker than DARK_BELOW has its fills darker than this OKLab lightness (0 to 1) lightened,
+# keeping their hue and how they differ from each other, so it reads on the app's grey circles in both
+# themes like every other drawing does, with no special treatment in the app.
+LIFT_BELOW = 0.5
 
 # Where Fluent's folder name (the emoji's CLDR name) differs from the Unicode character name.
 FOLDERS = {
@@ -296,6 +302,58 @@ def brightness(svg_path):
     return total / weight if weight else 1.0
 
 
+def _linear(c):
+    return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+
+def _gamma(c):
+    c = min(max(c, 0.0), 1.0)
+    return 12.92 * c if c <= 0.0031308 else 1.055 * c ** (1 / 2.4) - 0.055
+
+
+def to_oklab(colour):
+    r, g, b = (_linear(int(colour[i:i + 2], 16) / 255) for i in (1, 3, 5))
+    l = (0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b) ** (1 / 3)
+    m = (0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b) ** (1 / 3)
+    s = (0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b) ** (1 / 3)
+    return (0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s,
+            1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s,
+            0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s)
+
+
+def from_oklab(lab):
+    """sRGB hex for an OKLab colour, its chroma reduced until it fits."""
+    lightness, a, b = lab
+    for _ in range(40):
+        l = (lightness + 0.3963377774 * a + 0.2158037573 * b) ** 3
+        m = (lightness - 0.1055613458 * a - 0.0638541728 * b) ** 3
+        s = (lightness - 0.0894841775 * a - 1.2914855480 * b) ** 3
+        rgb = (4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+               -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+               -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s)
+        if all(-1e-4 <= c <= 1 + 1e-4 for c in rgb):
+            break
+        a, b = a * 0.95, b * 0.95
+    return "#" + "".join(f"{round(_gamma(c) * 255):02X}" for c in rgb)
+
+
+def lift(colour):
+    """
+    A fill darker than LIFT_BELOW, lightened: 0 to LIFT_BELOW becomes 0.40 to 0.70, in the same hue,
+    and its colour strengthened (chroma x1.8) so it matches its neighbours rather than turning grey.
+    """
+    lightness, a, b = to_oklab(colour)
+    if lightness >= LIFT_BELOW:
+        return colour
+    return from_oklab((0.40 + 0.6 * lightness, a * 1.8, b * 1.8))
+
+
+def lift_fills(xml):
+    """A drawing's XML with its dark fills lightened, and saying so in its header."""
+    xml = re.sub(r'android:fillColor="(#[0-9A-F]{6})"', lambda m: f'android:fillColor="{lift(m.group(1))}"', xml)
+    return xml.replace(" Made by tools/fluent_icons.py. -->", " Made by tools/fluent_icons.py, its dark fills lightened. -->", 1)
+
+
 def resource_name(emoji):
     return "fe_" + "_".join(f"{ord(c):x}" for c in emoji)
 
@@ -319,12 +377,15 @@ def main():
                 f.write(fetch(RAW_URL + urllib.parse.quote(path)))
         with open(cached, "rb") as f:
             xml = convert(f.read(), f"{emoji} {path.split('/')[1]}")
+        light = brightness(cached)
+        if light is None:
+            raise SystemExit("rsvg-convert is needed to find the drawings too dark for the app's circles")
+        if light < DARK_BELOW:
+            xml = lift_fills(xml)
+            dark.append(emoji)
         with open(os.path.join(DRAWABLES, resource_name(emoji) + ".xml"), "w", encoding="utf-8") as f:
             f.write(xml)
         made[emoji] = resource_name(emoji)
-        light = brightness(cached)
-        if light is not None and light < DARK_BELOW:
-            dark.append(emoji)
     with open(KOTLIN, "w", encoding="utf-8") as f:
         f.write("package com.xern.xrnwallet.ui\n\nimport com.xern.xrnwallet.R\n\n")
         f.write("// Made by tools/fluent_icons.py from Microsoft's Fluent Emoji (Flat), MIT licence. Don't edit by hand.\n\n")
@@ -332,10 +393,8 @@ def main():
         f.write("internal val fluentDrawables: Map<String, Int> = mapOf(\n")
         for emoji, name in sorted(made.items()):
             f.write(f'    "{emoji}" to R.drawable.{name},\n')
-        f.write(")\n\n")
-        f.write(f"/** Drawings mostly darker than {DARK_BELOW} (0 black, 1 white): on a dark circle they need a lighter one. */\n")
-        f.write("internal val fluentDark: Set<String> = setOf(" + ", ".join(f'"{e}"' for e in sorted(dark)) + ")\n")
-    print(f"dark: {' '.join(sorted(dark)) or 'none'}")
+        f.write(")\n")
+    print(f"lightened: {' '.join(sorted(dark)) or 'none'}")
     print(f"{len(made)} drawings written; {len(missing)} emoji without one: {', '.join(missing) or 'none'}")
 
 

@@ -368,9 +368,6 @@ object Art {
     fun drawable(icon: String): Int? =
         if (isEmoji(icon) || style(icon) != 1) null else fluentDrawables[subject(icon)]
 
-    /** A colour drawing that's mostly dark, which needs a lighter circle on a dark page. */
-    fun isDark(icon: String): Boolean = drawable(icon) != null && subject(icon) in fluentDark
-
     /** The symbol for [icon]: its style's, or the solid one for Style 1 and Style 5. */
     fun vector(icon: String): ImageVector? {
         if (isEmoji(icon)) return null

@@ -251,6 +251,24 @@ fun TwelveMonthsPreview() = Frame { TwelveMonths(thisMonth) }
 @Composable
 fun TwelveMonthsLightPreview() = Frame(settings = sampleSettings.copy(themeMode = Settings.THEME_LIGHT)) { TwelveMonths(thisMonth) }
 
+/** The four drawings that used to be too dark for their circle, among some ordinary ones. */
+@Composable
+private fun CategoryIcons() {
+    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        listOf(listOf("🎓", "🎵", "🐾", "🔌", "🍗"), listOf("🎬", "🎮", "📷", "🏠", "💊")).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) { row.forEach { Bubble(it, 58.dp) } }
+        }
+    }
+}
+
+@Preview(name = "Category icons", widthDp = 393, heightDp = 170)
+@Composable
+fun CategoryIconsPreview() = Frame { CategoryIcons() }
+
+@Preview(name = "Category icons light", widthDp = 393, heightDp = 170)
+@Composable
+fun CategoryIconsLightPreview() = Frame(settings = sampleSettings.copy(themeMode = Settings.THEME_LIGHT)) { CategoryIcons() }
+
 /** Every launcher colour as the family tile, to hold against docs/icon.svg. */
 @Preview(name = "App tiles", widthDp = 393, heightDp = 220)
 @Composable
