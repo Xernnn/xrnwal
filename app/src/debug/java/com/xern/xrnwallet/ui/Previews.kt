@@ -24,6 +24,7 @@ import com.xern.xrnwallet.data.AppDatabase
 import com.xern.xrnwallet.data.Bill
 import com.xern.xrnwallet.data.BillType
 import com.xern.xrnwallet.data.Budget
+import com.xern.xrnwallet.data.Insights
 import com.xern.xrnwallet.data.Category
 import com.xern.xrnwallet.data.Ledger
 import com.xern.xrnwallet.data.Repository
@@ -72,12 +73,12 @@ private val sampleBills: List<Bill> = run {
     val random = Random(7)
     val bills = mutableListOf<Bill>()
     var id = 1L
-    fun add(day: LocalDate, hour: Int, type: Int, category: String, cents: Long, account: Long, note: String = "") {
+    fun add(day: LocalDate, hour: Int, type: Int, category: String, cents: Long, account: Long, note: String = "", rule: Long? = null) {
         val at = day.atTime(LocalTime.of(hour, random.nextInt(60))).atZone(zone).toInstant().toEpochMilli()
         val categoryType = if (type == BillType.INCOME) BillType.INCOME else BillType.EXPENSE
         bills += Bill(
             id = id++, ledgerId = 1, type = type, categoryId = categoryId(category, categoryType), accountId = account,
-            amountCents = cents, currency = "AUD", note = note, atMillis = at,
+            amountCents = cents, currency = "AUD", note = note, atMillis = at, recurringId = rule,
         )
     }
     fun between(low: Int, high: Int): Long = (low + random.nextInt(high - low + 1)) * 100L + random.nextInt(100)
@@ -97,15 +98,15 @@ private val sampleBills: List<Bill> = run {
         if (random.nextInt(100) < (if (winter) 6 else 3)) add(day, 14, BillType.EXPENSE, "Clothing", between(30, 140), CREDIT)
         if (random.nextInt(100) < 3) add(day, 13, BillType.EXPENSE, "Education", between(25, 95), EVERYDAY, "Textbook")
         when (day.dayOfMonth) {
-            1 -> add(day, 9, BillType.EXPENSE, "Rent", 165_000, EVERYDAY, "Rent")
-            3 -> add(day, 7, BillType.EXPENSE, "Membership", 5_500, CREDIT, "Gym")
-            12 -> add(day, 20, BillType.EXPENSE, "Gaming", 1_499, CREDIT, "Game pass")
-            18 -> add(day, 10, BillType.EXPENSE, "Digital", 1_299, CREDIT, "Music")
+            1 -> add(day, 9, BillType.EXPENSE, "Rent", 165_000, EVERYDAY, "Rent", rule = 1)
+            3 -> add(day, 7, BillType.EXPENSE, "Membership", 5_500, CREDIT, "Gym", rule = 2)
+            12 -> add(day, 20, BillType.EXPENSE, "Gaming", 1_499, CREDIT, "Game pass", rule = 3)
+            18 -> add(day, 10, BillType.EXPENSE, "Digital", 1_299, CREDIT, "Music", rule = 4)
             20 -> if (random.nextInt(3) == 0) add(day, 18, BillType.INCOME, "Side job", between(250, 600), EVERYDAY, "Tutoring")
         }
         if ((day.monthValue == 2 || day.monthValue == 7) && day.dayOfMonth == 15) add(day, 10, BillType.EXPENSE, "Education", 128_000, EVERYDAY, "Semester fees")
         if (day.dayOfWeek == DayOfWeek.THURSDAY && java.time.temporal.ChronoUnit.WEEKS.between(start, day) % 2 == 0L) {
-            add(day, 6, BillType.INCOME, "Salary", 235_000, EVERYDAY, "Pay")
+            add(day, 6, BillType.INCOME, "Salary", 235_000, EVERYDAY, "Pay", rule = 5)
         }
         if (day.monthValue == 12 && day.dayOfMonth == 19) add(day, 9, BillType.INCOME, "Bonus", 150_000, EVERYDAY)
         if (day.monthValue % 3 == 0 && day.dayOfMonth == 28) add(day, 9, BillType.INCOME, "Dividend", between(90, 160), SAVER)
@@ -184,37 +185,37 @@ private fun Frame(settings: Settings = sampleSettings, snapshot: Snapshot = samp
 
 private val thisMonth: Period get() = Period.Month(YearMonth.from(today))
 
-@Preview(name = "Reports month", widthDp = 393, heightDp = 2300)
+@Preview(name = "Reports month", widthDp = 393, heightDp = 3000)
 @Composable
 fun ReportsMonthPreview() = Frame(period = thisMonth) { ReportsScreen() }
 
-@Preview(name = "Reports year", widthDp = 393, heightDp = 2300)
+@Preview(name = "Reports year", widthDp = 393, heightDp = 3000)
 @Composable
 fun ReportsYearPreview() = Frame(period = Period.Year(today.year)) { ReportsScreen() }
 
-@Preview(name = "Reports 90 days", widthDp = 393, heightDp = 2300)
+@Preview(name = "Reports 90 days", widthDp = 393, heightDp = 3000)
 @Composable
 fun ReportsCustomPreview() = Frame(period = Period.Custom(today.minusDays(89), today)) { ReportsScreen() }
 
 private val fitted = sampleSettings.copy(trendFit = true)
 
-@Preview(name = "Reports month fitted", widthDp = 393, heightDp = 2300)
+@Preview(name = "Reports month fitted", widthDp = 393, heightDp = 3000)
 @Composable
 fun ReportsMonthFitPreview() = Frame(settings = fitted, period = thisMonth) { ReportsScreen() }
 
-@Preview(name = "Reports year fitted", widthDp = 393, heightDp = 2300)
+@Preview(name = "Reports year fitted", widthDp = 393, heightDp = 3000)
 @Composable
 fun ReportsYearFitPreview() = Frame(settings = fitted, period = Period.Year(today.year)) { ReportsScreen() }
 
-@Preview(name = "Reports 90 days fitted", widthDp = 393, heightDp = 2300)
+@Preview(name = "Reports 90 days fitted", widthDp = 393, heightDp = 3000)
 @Composable
 fun ReportsCustomFitPreview() = Frame(settings = fitted, period = Period.Custom(today.minusDays(89), today)) { ReportsScreen() }
 
-@Preview(name = "Reports 365 days fitted", widthDp = 393, heightDp = 2300)
+@Preview(name = "Reports 365 days fitted", widthDp = 393, heightDp = 3000)
 @Composable
 fun ReportsLongFitPreview() = Frame(settings = fitted, period = Period.Custom(today.minusDays(364), today)) { ReportsScreen() }
 
-@Preview(name = "Reports month light", widthDp = 393, heightDp = 2300)
+@Preview(name = "Reports month light", widthDp = 393, heightDp = 3000)
 @Composable
 fun ReportsMonthLightPreview() = Frame(settings = sampleSettings.copy(themeMode = Settings.THEME_LIGHT), period = thisMonth) { ReportsScreen() }
 
@@ -229,6 +230,26 @@ fun AddBillLightPreview() = Frame(settings = sampleSettings.copy(themeMode = Set
 @Preview(name = "Welcome", widthDp = 393, heightDp = 873)
 @Composable
 fun WelcomePreview() = Frame(snapshot = Snapshot(ledgers = sampleSnapshot.ledgers, accounts = sampleAccounts.take(1), categories = sampleCategories)) { WelcomeScreen() }
+
+/** The twelve-month cards on their own, as they sit below the ranking on Reports. */
+@Composable
+private fun TwelveMonths(period: Period) {
+    val rules = sampleSettings.periodRules
+    val range = period.range(rules)
+    val months = Insights.window(period, range, rules)
+    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        FlowCard(Insights.flows(sampleBills, months, rules), months.last())
+        MixCard(Insights.mix(sampleSnapshot, sampleBills, months, rules), months, months.last())
+    }
+}
+
+@Preview(name = "Twelve months", widthDp = 393, heightDp = 900)
+@Composable
+fun TwelveMonthsPreview() = Frame { TwelveMonths(thisMonth) }
+
+@Preview(name = "Twelve months light", widthDp = 393, heightDp = 900)
+@Composable
+fun TwelveMonthsLightPreview() = Frame(settings = sampleSettings.copy(themeMode = Settings.THEME_LIGHT)) { TwelveMonths(thisMonth) }
 
 /** Every launcher colour as the family tile, to hold against docs/icon.svg. */
 @Preview(name = "App tiles", widthDp = 393, heightDp = 220)

@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.xern.xrnwallet.data.Bill
 import com.xern.xrnwallet.data.BillType
+import com.xern.xrnwallet.data.Insights
 import com.xern.xrnwallet.data.Snapshot
 import com.xern.xrnwallet.data.Stats
 import com.xern.xrnwallet.data.inRange
@@ -132,7 +133,9 @@ fun ReportsScreen() {
                 style = MaterialTheme.typography.bodyLarge,
             )
         }
-        EndlessPager(pages, Modifier.weight(1f)) { ReportPage(it, bills, view) }
+        // The monthly budget, when it applies to what's shown: not to a filtered few.
+        val budget = if (filter.active || !settings.budgetEnabled) null else s.budgets.firstOrNull { it.categoryId == null }?.amountCents
+        EndlessPager(pages, Modifier.weight(1f)) { ReportPage(it, bills, view, budget) }
     }
 
     if (pick) {
@@ -150,7 +153,7 @@ fun ReportsScreen() {
 }
 
 @Composable
-private fun ReportPage(period: Period, bills: List<Bill>, view: ReportView) {
+private fun ReportPage(period: Period, bills: List<Bill>, view: ReportView, budget: Long?) {
     val s = snap()
     val f = fmt()
     val nav = LocalNav.current
@@ -167,6 +170,14 @@ private fun ReportPage(period: Period, bills: List<Bill>, view: ReportView) {
     val points = remember(bills, period, range, view.trendType) { Stats.trend(bills, period, range, view.trendType) }
     val ranks = remember(s, inPeriod, view.rankType, view.topLevel) { Stats.ranking(s, inPeriod, view.rankType, view.topLevel) }
     val top = remember(inPeriod, view.topType) { Stats.top(inPeriod, view.topType) }
+    val months = remember(period, range, rules) { Insights.window(period, range, rules) }
+    val flows = remember(bills, months, rules) { Insights.flows(bills, months, rules) }
+    val mix = remember(s, bills, months, rules) { Insights.mix(s, bills, months, rules) }
+    val focus = when {
+        period !is Period.Year -> months.last()
+        period.year == today.year -> rules.monthOf(today).let { if (it.year == period.year) it else months.last() }
+        else -> months.last()
+    }
 
     Column(
         Modifier
@@ -199,6 +210,8 @@ private fun ReportPage(period: Period, bills: List<Bill>, view: ReportView) {
                 )
             }
         }
+        if (period !is Period.Custom) PaceCard(period, bills, rules, today, budget)
+        DailyCard(range, bills, today, rules.firstDayOfWeek)
         Panel {
             Column(Modifier.padding(16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -236,6 +249,8 @@ private fun ReportPage(period: Period, bills: List<Bill>, view: ReportView) {
                 }
             }
         }
+        FlowCard(flows, focus)
+        MixCard(mix, months, focus)
         Panel {
             Column(Modifier.padding(top = 16.dp, bottom = 8.dp)) {
                 Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
