@@ -55,11 +55,16 @@ class AppUi(today: LocalDate, rules: PeriodRules) {
     var reportPeriod by mutableStateOf<Period>(Period.Month(rules.monthOf(today)))
 }
 
-@Composable
-fun snap(): Snapshot = LocalRepo.current.snapshot.collectAsStateWithLifecycle().value
+/** Data held still, for drawing pages with no database behind them: the debug build's previews. */
+class FixedData(val snapshot: Snapshot, val settings: Settings)
+
+val LocalFixedData = staticCompositionLocalOf<FixedData?> { null }
 
 @Composable
-fun prefs(): Settings = LocalRepo.current.store.settings.collectAsStateWithLifecycle().value
+fun snap(): Snapshot = LocalFixedData.current?.snapshot ?: LocalRepo.current.snapshot.collectAsStateWithLifecycle().value
+
+@Composable
+fun prefs(): Settings = LocalFixedData.current?.settings ?: LocalRepo.current.store.settings.collectAsStateWithLifecycle().value
 
 @Composable
 fun fmt(): Fmt {
