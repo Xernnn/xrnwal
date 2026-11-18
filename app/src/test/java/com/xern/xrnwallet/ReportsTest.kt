@@ -1,13 +1,69 @@
 package com.xern.xrnwallet
 
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import com.xern.xrnwallet.data.Stats
+import com.xern.xrnwallet.ui.CategoryColours
+import com.xern.xrnwallet.ui.categoryColoursDark
+import com.xern.xrnwallet.ui.categoryColoursLight
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
+import kotlin.math.cbrt
+import kotlin.math.pow
+import kotlin.math.sqrt
 
-/** Reports' charts: which points of a squeezed chart are labelled. */
+/** Reports' charts: which points of a squeezed chart are labelled, and the category colours. */
 class ReportsTest {
+    /** OKLab lightness and the distance between two colours, x100 as the dataviz validator counts it. */
+    private fun oklab(colour: Color): Triple<Double, Double, Double> {
+        fun linear(c: Float) = if (c <= 0.04045f) c / 12.92 else ((c + 0.055) / 1.055).pow(2.4)
+        val (r, g, b) = Triple(linear(colour.red), linear(colour.green), linear(colour.blue))
+        val l = cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b)
+        val m = cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b)
+        val s = cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b)
+        return Triple(
+            0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s,
+            1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s,
+            0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s,
+        )
+    }
+
+    private fun distance(a: Color, b: Color): Double {
+        val (l1, a1, b1) = oklab(a)
+        val (l2, a2, b2) = oklab(b)
+        return 100 * sqrt((l1 - l2).pow(2) + (a1 - a2).pow(2) + (b1 - b2).pow(2))
+    }
+
+    private fun contrast(a: Color, b: Color): Float {
+        val (light, dark) = listOf(a.luminance(), b.luminance()).sortedDescending()
+        return (light + 0.05f) / (dark + 0.05f)
+    }
+
+    private fun checkPalette(colours: CategoryColours, surface: Color, lightness: ClosedFloatingPointRange<Double>, minContrast: Float) {
+        assertEquals(8, colours.hues.toSet().size)
+        colours.hues.forEach { hue ->
+            assertTrue("$hue lightness ${oklab(hue).first}", oklab(hue).first in lightness)
+            assertTrue("$hue contrast ${contrast(hue, surface)}", contrast(hue, surface) >= minContrast)
+        }
+        // Neighbouring ranks sit next to each other in the pie and the stacked bars.
+        colours.hues.zipWithNext().forEach { (a, b) -> assertTrue("$a next to $b", distance(a, b) >= 15) }
+        // A ninth category on is grey, never a hue again.
+        assertEquals(colours.other, colours.ranked(8))
+        assertEquals(colours.other, colours.ranked(19))
+    }
+
+    @Test
+    fun theCategoryColoursReadOnTheDarkPageAndStayApart() {
+        // The old colours were pale on the dark page: the yellow at OKLab lightness 0.89.
+        checkPalette(categoryColoursDark, Color(0xFF1E1E20), 0.48..0.67, 3f)
+    }
+
+    @Test
+    fun theCategoryColoursReadOnTheLightPageAndStayApart() {
+        checkPalette(categoryColoursLight, Color.White, 0.43..0.77, 2f)
+    }
     private fun days(from: LocalDate, count: Int) = (0 until count).map { from.plusDays(it.toLong()) }
 
     @Test

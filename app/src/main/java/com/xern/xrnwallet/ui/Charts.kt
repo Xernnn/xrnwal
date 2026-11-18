@@ -550,7 +550,8 @@ private fun MixChart(slices: List<Insights.Slice>, months: List<YearMonth>, chos
     val ink = MaterialTheme.colorScheme.onSurface
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val grid = MaterialTheme.colorScheme.outline
-    val colours = slices.mapIndexed { i, slice -> if (slice.category == null) pieColors.last() else pieColors[i % (pieColors.size - 1)] }
+    val palette = categoryColours()
+    val colours = slices.mapIndexed { i, slice -> if (slice.category == null) palette.other else palette.ranked(i) }
     val totals = months.indices.map { m -> slices.sumOf { it.perMonth[m] } }
     val top = scaleTop(totals.maxOrNull() ?: 0L)
     val right = 112.dp

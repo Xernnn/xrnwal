@@ -41,6 +41,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
@@ -61,11 +62,36 @@ import kotlin.math.max
 import kotlin.math.pow
 import kotlin.math.sin
 
-val pieColors: List<Color> = listOf(
-    Color(0xFF5B9BEB), Color(0xFFF29048), Color(0xFFEE4C5F), Color(0xFFFFD61F),
-    Color(0xFFD94CB5), Color(0xFF83D12F), Color(0xFF2FD9C7), Color(0xFF8E7CF0),
-    Color(0xFFB08968), Color(0xFF9AA0A6),
+/**
+ * The colours categories are drawn in, by rank: eight hues in an order that keeps neighbours apart, for
+ * colour-blind eyes too, each stepped for its theme. They are the dataviz reference palette's, checked
+ * with its validator in both themes: lightness and colour, neighbour separation, and contrast with the
+ * page (three light-theme hues sit below 3:1 on white, which every chart offsets by naming its bands).
+ * A ninth category on takes the grey of "Other" rather than repeating a hue.
+ */
+class CategoryColours(val hues: List<Color>, val other: Color) {
+    fun ranked(index: Int): Color = hues.getOrElse(index) { other }
+}
+
+val categoryColoursDark = CategoryColours(
+    listOf(
+        Color(0xFF3987E5), Color(0xFFD95926), Color(0xFF199E70), Color(0xFFC98500),
+        Color(0xFFD55181), Color(0xFF0CA30C), Color(0xFF9085E9), Color(0xFFE66767),
+    ),
+    Color(0xFF8E9399),
 )
+
+val categoryColoursLight = CategoryColours(
+    listOf(
+        Color(0xFF2A78D6), Color(0xFFEB6834), Color(0xFF1BAF7A), Color(0xFFEDA100),
+        Color(0xFFE87BA4), Color(0xFF008300), Color(0xFF6250D6), Color(0xFFE34948),
+    ),
+    Color(0xFFA3A8AE),
+)
+
+@Composable
+fun categoryColours(): CategoryColours =
+    if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) categoryColoursDark else categoryColoursLight
 
 data class ReportFilter(
     val tags: Set<Long> = emptySet(),
@@ -307,7 +333,7 @@ private fun RankRow(index: Int, rank: Stats.Rank, type: Int, onClick: () -> Unit
                         .fillMaxWidth((rank.share / 100).toFloat().coerceIn(0.01f, 1f))
                         .fillMaxHeight()
                         .clip(RoundedCornerShape(3.dp))
-                        .background(pieColors[index % pieColors.size]),
+                        .background(categoryColours().ranked(index)),
                 )
             }
         }
@@ -527,6 +553,8 @@ private fun Plot(
 private fun Pie(shares: List<Float>, modifier: Modifier = Modifier) {
     val font = rememberCanvasTypeface()
     val label = MaterialTheme.colorScheme.onSurface
+    val colours = categoryColours()
+    val gap = MaterialTheme.colorScheme.surface
     Canvas(modifier) {
         val radius = size.minDimension * 0.38f
         val center = Offset(size.width / 2, size.height / 2)
@@ -543,7 +571,7 @@ private fun Pie(shares: List<Float>, modifier: Modifier = Modifier) {
         }
         shares.forEachIndexed { index, share ->
             val sweep = share / total * 360f
-            drawArc(pieColors[index % pieColors.size], angle, sweep, true, origin, box)
+            drawArc(colours.ranked(index), angle, sweep, true, origin, box)
             if (share >= 2f) {
                 val middle = Math.toRadians((angle + sweep / 2).toDouble())
                 val x = center.x + (radius + 26.dp.toPx()) * cos(middle).toFloat()
@@ -551,6 +579,15 @@ private fun Pie(shares: List<Float>, modifier: Modifier = Modifier) {
                 drawContext.canvas.nativeCanvas.drawText(percent(share.toDouble()), x, y, paint)
             }
             angle += sweep
+        }
+        // A thin line of the card's colour between slices, so neighbours read apart.
+        if (shares.count { it > 0f } > 1) {
+            var edge = 0f
+            shares.forEach { share ->
+                val at = Math.toRadians(edge.toDouble())
+                drawLine(gap, center, Offset(center.x + radius * cos(at).toFloat(), center.y + radius * sin(at).toFloat()), 1.5.dp.toPx())
+                edge += share / total * 360f
+            }
         }
     }
 }
