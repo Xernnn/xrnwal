@@ -19,4 +19,15 @@
                 android:strokeLineJoin="round" />
         </group>
     </group>
+    <!-- The clasp's dot, in this tile's colour over the xrn stroke: the foreground's hole shows it,
+         so the stroke doesn't show through the clasp. Drawn larger than the hole; the clasp hides the rest. -->
+    <group android:translateX="18" android:translateY="18"
+        android:scaleX="0.72" android:scaleY="0.72">
+        <group android:translateX="-2.5" android:translateY="-2.5"
+            android:scaleX="1.05" android:scaleY="1.05">
+            <path
+                android:pathData="M55.4,50 A3.6,3.6 0 1 1 62.6,50 A3.6,3.6 0 1 1 55.4,50 Z"
+                android:fillColor="#5F6B7A" />
+        </group>
+    </group>
 </vector>
