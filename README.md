@@ -2,7 +2,7 @@
   <img src="docs/icon.svg" width="72" height="72" alt="">
 </p>
 
-<h1 align="center">xrnwallet</h1>
+<h1 align="center">xrnwal</h1>
 
 A local-first personal money tracker for Android: ledgers, accounts, categories, budgets, recurring
 bills, savings plans, reports, reminders, CSV and backup files, and sync to a server of your own.
@@ -12,7 +12,8 @@ refresh button.
 
 Kotlin and Jetpack Compose, with Room for storage. Minimum Android 8.0. Version 0.5.3 (build 12).
 Laid out and working like the money app it replaced, in its own code and with its own artwork; see
-[where it differs](#where-it-differs-from-money-manager).
+[where it differs](#where-it-differs-from-money-manager). It was called xrnwallet
+(`com.xern.xrnwallet`) until 0.6.0; see [moving from xrnwallet](#moving-from-xrnwallet).
 
 ## Screenshots
 
@@ -94,7 +95,7 @@ build only accepts `https://` addresses.
 ANDROID_USER_HOME=$HOME/.android ./gradlew :app:assembleRelease   # app/build/outputs/apk/release/app-release.apk
 adb install -r app/build/outputs/apk/release/app-release.apk
 ANDROID_USER_HOME=$HOME/.android ./gradlew :app:assembleDebug     # app/build/outputs/apk/debug/app-debug.apk
-android preview render "?:app" --fqn=com.xern.xrnwallet.ui.PreviewsKt.ReportsMonthPreview
+android preview render "?:app" --fqn=com.xern.xrnwal.ui.PreviewsKt.ReportsMonthPreview
 ```
 
 The unit tests cover adding bills and sums, dates, the domain rules (balances, corrections,
@@ -115,22 +116,51 @@ other and keeps the app's data. That key isn't in the repo and must never be add
 
 ## Sync server
 
-`server/xrnwallet-sync.py` keeps a copy of the wallet on a home server. It is one Python file, needing
+`server/xrnwal-sync.py` keeps a copy of the wallet on a home server. It is one Python file, needing
 only `bcrypt` beyond the standard library. Use Python 3.14.7 or newer: older versions answer a malformed request with no HTTP status line, which the server tests check for.
 
 ```sh
-python3 -m unittest server/test_xrnwallet_sync.py   # server tests
-server/deploy.sh [ssh-host]                         # install or update it (Termux, runit, Funnel)
+python3 -m unittest server/test_xrnwal_sync.py   # server tests
+python3 -m unittest server/test_deploy.py        # deploy.sh against a made-up phone
+server/deploy.sh [ssh-host]                      # install, update or move it over (Termux, runit, Funnel)
 ```
 
-In the app: Mine, Data synchronization, then the server's address ending in `/xrnwallet`.
+In the app: Mine, Data synchronization, then the server's address ending in `/xrnwal`.
 
 It keeps one JSON document per user (the backup format, without the app lock) and the bill photos,
 behind HTTP Basic auth checked against the htpasswd users file shared with the other xrn sync
 servers. Every write needs `If-Match`, so a phone that never synced can't wipe the copy by
 accident; `/versions` lists the earlier copies, and `/health` answers without a login. Wrong
-passwords lock an address out for a while. `deploy.sh` runs it as a runit service on port 5237,
-published under `/xrnwallet` by Tailscale Funnel.
+passwords lock an address out for a while. Behind a proxy that passes the path on, it answers under
+`/xrnwal` and under `/xrnwallet`, the path from before the rename.
+
+`deploy.sh` runs the server tests first and changes nothing if they fail. It runs the server as the
+runit service `xrnwal-sync` on port 5237 from `~/xrnwal-sync` (data in `~/xrnwal-sync/data`, log in
+`$PREFIX/var/log/sv/xrnwal-sync`) and publishes it under `/xrnwal` with Tailscale Funnel. Its run
+script first calls `~/.local/bin/sv-guard`, the home server's guard that stops a copy of the program
+left running after its supervisor died, so the deploy refuses to start without it. It ends by saying
+what it did.
+
+## Moving from xrnwallet
+
+The app was xrnwallet, `com.xern.xrnwallet`, until 0.6.0. The new id installs xrnwal as a new app,
+empty, beside the old one.
+
+- **The server:** the next `server/deploy.sh` moves it over. On a server with `~/xrnwallet-sync` and
+  no `~/xrnwal-sync`, it stops the `xrnwallet-sync` service and removes it, stops any copy of the old
+  program still holding the port, renames the folder with its data in one move, moves the log, and
+  starts `xrnwal-sync` on the same port. `/xrnwallet` stays published beside `/xrnwal`, pointing at
+  the same port, so the old app keeps syncing until you take it off with
+  `tailscale funnel --https=443 --set-path=/xrnwallet off`; later deploys don't put it back. With both
+  folders there it changes nothing and says so. Run again, it moves nothing more.
+- **The phone:** in xrnwal, Mine, Data synchronization, connect with the address ending in `/xrnwal`
+  and the same login. The server already has a copy, so it asks: **Use the server's copy** brings the
+  wallet and its photos down, after filing the new app's starting ledger on the server under
+  Earlier copies. A saved address ending in `/xrnwallet` is moved to `/xrnwal` when the app opens.
+- **Backup files** from xrnwallet restore as they are (Data synchronization, Restore from a file): the
+  format names no app, and photos are found by file name.
+- **Set again on the phone:** the app lock, the widgets, the icon colour, and HyperOS Autostart, which
+  reminders need to come back after a restart. They belong to the installed app, not the wallet.
 
 ## Limits
 
@@ -138,15 +168,14 @@ published under `/xrnwallet` by Tailscale Funnel.
   don't merge.
 - English only; no camera on bills (the photo picker instead); no voice entry.
 - Biometric unlock and Recents on HyperOS haven't been tested ([docs/status.md](docs/status.md)).
-- The bank and wallet logos in `res/drawable-nodpi/logo_*` belong to their owners (Investment
-  apart). They are there to mark the owner's own accounts; check each brand's terms before
-  publishing a build.
+- The bank and wallet logos in `res/drawable-nodpi/logo_*` (Investment apart) are their owners'
+  trademarks, used only to label your own accounts. The app is not affiliated with any of them.
 
 ## Where it differs from Money Manager
 
-xrnwallet replaced Money Manager (an Android expense tracker) on the owner's phone, with every
-bill imported from its CSV export and the totals, balances and net assets matching. It follows its
-screens, flows and words, without its mascot, notebook covers, key doodles or icons.
+xrnwal (then xrnwallet) replaced Money Manager (an Android expense tracker) on the owner's phone,
+with every bill imported from its CSV export and the totals, balances and net assets matching. It
+follows its screens, flows and words, without its mascot, notebook covers, key doodles or icons.
 
 - **Added:** sync to your own server with Earlier copies and Disconnect, asking before anything
   is overwritten; Reports' spending pace, daily calendar and twelve-month charts; the budget switch
@@ -164,10 +193,17 @@ across from its CSV export involves.
 
 ## Credits
 
-Uses [MiSans](https://hyperos.mi.com/font) by Xiaomi. The colour icons are drawn from Microsoft's
-[Fluent Emoji](https://github.com/microsoft/fluentui-emoji) (MIT licence, see
-[docs/licenses/fluentui-emoji.txt](docs/licenses/fluentui-emoji.txt)); `tools/fluent_icons.py` makes
-them, and makes the ones a new emoji in the code needs.
+- MiSans by Xiaomi, used under the MiSans font licence (free for commercial use when the software
+  notes that it uses MiSans; the Mine page does). The font files are not covered by this repository's
+  licence. https://hyperos.mi.com/font/en/ (see [docs/licenses/misans.txt](docs/licenses/misans.txt)).
+- The colour icons are drawn from Microsoft's [Fluent Emoji](https://github.com/microsoft/fluentui-emoji)
+  (MIT licence, see [docs/licenses/fluentui-emoji.txt](docs/licenses/fluentui-emoji.txt));
+  `tools/fluent_icons.py` makes them, and makes the ones a new emoji in the code needs.
+- The bank and wallet logos are their owners' trademarks, used only to label your own accounts.
+
+## Licence
+
+MIT, see [LICENSE](LICENSE). The MiSans font files and the bank and wallet logos are not covered by it.
 
 ## Docs
 

@@ -1,0 +1,7 @@
+The font files in app/src/main/res/font/misans_*.ttf are MiSans by Xiaomi, unmodified.
+
+MiSans by Xiaomi, used under the MiSans font licence (free for commercial use when the software
+notes that it uses MiSans). The font files are not covered by this repository's licence.
+https://hyperos.mi.com/font/en/
+
+The app notes it at the bottom of its Mine page ("Font: MiSans by Xiaomi").

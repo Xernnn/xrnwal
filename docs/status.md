@@ -179,8 +179,6 @@ phone or with the real data.
 - Paging against the build before it, on an emulator with both fully compiled: opening a bill and going
   back cost the same. Turning a page takes about 1 ms of app work per frame, except one frame of about
   42 ms when the next page is first built. Not yet measured on a phone.
-- The logos in `res/drawable-nodpi/logo_*` belong to their owners, apart from Investment. They are here
-  to identify the owner's own accounts, so check each brand's terms before publishing a build.
 - On gesture navigation a right swipe from the very edge of the screen is the system's Back, which
   leaves the app from Home.
 

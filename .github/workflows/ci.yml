@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  # One job on purpose: this repo is private, so every runner minute counts.
+  # One job on purpose, to keep runner minutes down.
   check:
     runs-on: ubuntu-latest
     steps:
