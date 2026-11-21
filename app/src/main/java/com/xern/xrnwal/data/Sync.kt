@@ -69,6 +69,16 @@ object ServerAddress {
     fun isValid(address: String, emulator: Boolean = false): Boolean =
         Regex("https://[^/\\s]+\\S*", RegexOption.IGNORE_CASE).matches(address) ||
             (emulator && Regex("http://10\\.0\\.2\\.2(:\\d+)?(/\\S*)?").matches(address))
+
+    /**
+     * [address] at the server's path since the app was renamed: one ending in /xrnwallet, as set up
+     * before, ends in /xrnwal. The home server answers at the old path only until it is taken off.
+     */
+    fun renamed(address: String): String =
+        if (address.endsWith(OLD_PATH)) address.dropLast(OLD_PATH.length) + PATH else address
+
+    private const val OLD_PATH = "/xrnwallet"
+    private const val PATH = "/xrnwal"
 }
 
 /** The same rule as the server's: a plain file name, so a copy can't name a path on this phone. */

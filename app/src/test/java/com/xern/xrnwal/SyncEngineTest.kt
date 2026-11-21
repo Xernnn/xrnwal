@@ -11,6 +11,7 @@ import com.xern.xrnwal.data.SyncMeta
 import com.xern.xrnwal.data.SyncMetaStore
 import com.xern.xrnwal.data.SyncOutcome
 import com.xern.xrnwal.data.SyncServer
+import com.xern.xrnwal.data.SyncStore
 import com.xern.xrnwal.data.SyncedWallet
 import com.xern.xrnwal.data.isSafePhotoName
 import com.xern.xrnwal.data.sha256
@@ -526,6 +527,27 @@ class SyncEngineTest {
         assertTrue(ServerAddress.isValid("http://10.0.2.2:5237", emulator = true))
         assertFalse(ServerAddress.isValid("http://10.0.2.2.example.net", emulator = true))
         assertEquals("https://a.net/xrnwal", ServerAddress.clean(" https://a.net/xrnwal// "))
+    }
+
+    @Test fun anAddressSavedBeforeTheRenameMovesToTheNewPathAsTheAppOpens() {
+        assertEquals("https://home.example.net/xrnwal", ServerAddress.renamed("https://home.example.net/xrnwallet"))
+        for (kept in listOf(
+            "https://home.example.net/xrnwal", "https://home.example.net/wallet",
+            "https://home.example.net/xrnwallets", "https://xrnwallet.example.net",
+        )) {
+            assertEquals(kept, ServerAddress.renamed(kept))
+        }
+        val prefs = MemoryPrefs()
+        prefs.edit().putString("address", "https://home.example.net/xrnwallet").putString("user", "alex")
+            .putString("password", "sealed").putLong("version", 41).commit()
+        assertEquals("https://home.example.net/xrnwal", SyncStore(prefs).address())
+        assertEquals("https://home.example.net/xrnwal", prefs.getString("address", null))
+        // The login and what this phone last matched stay as they were.
+        assertEquals("alex", prefs.getString("user", null))
+        assertEquals("sealed", prefs.getString("password", null))
+        assertEquals(41L, SyncStore(prefs).load().version)
+        assertEquals("https://home.example.net/xrnwal", prefs.getString("address", null))
+        assertNull(SyncStore(MemoryPrefs()).address())
     }
 
     @Test fun photoNamesFromACopyCantLeaveTheFolder() {

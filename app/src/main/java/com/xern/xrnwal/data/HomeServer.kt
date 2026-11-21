@@ -1,6 +1,7 @@
 package com.xern.xrnwal.data
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import kotlinx.serialization.json.Json
@@ -175,8 +176,16 @@ class HomeServer(private val login: ServerLogin, private val device: String) : S
 }
 
 /** The login and sync state of this phone. None of it is part of what gets synced. */
-class SyncStore(context: Context) : SyncMetaStore {
-    private val prefs = context.getSharedPreferences("sync", Context.MODE_PRIVATE)
+class SyncStore(private val prefs: SharedPreferences) : SyncMetaStore {
+    constructor(context: Context) : this(context.getSharedPreferences("sync", Context.MODE_PRIVATE))
+
+    init {
+        // As the app opens: an address saved before the rename is kept at the server's new path.
+        address()?.let { saved ->
+            val renamed = ServerAddress.renamed(saved)
+            if (renamed != saved) prefs.edit().putString(ADDRESS, renamed).apply()
+        }
+    }
 
     var auto: Boolean
         get() = prefs.getBoolean(AUTO, true)
@@ -186,8 +195,10 @@ class SyncStore(context: Context) : SyncMetaStore {
         get() = prefs.getBoolean(PHOTOS, true)
         set(value) = prefs.edit().putBoolean(PHOTOS, value).apply()
 
+    fun address(): String? = prefs.getString(ADDRESS, null)
+
     fun login(): ServerLogin? {
-        val address = prefs.getString(ADDRESS, null) ?: return null
+        val address = address() ?: return null
         val user = prefs.getString(USER, null) ?: return null
         val sealed = prefs.getString(PASSWORD, null) ?: return null
         val password = runCatching { Sealed.open(sealed) }.getOrNull() ?: return null
