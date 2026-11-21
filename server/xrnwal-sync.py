@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""xrnwallet sync server: the home server's copy of the wallet, behind HTTP Basic auth.
+"""xrnwal sync server: the home server's copy of the wallet, behind HTTP Basic auth.
 
 One JSON document per user (the app's backup format, with each bill's photo named by its file name
 and the app lock left out) plus the photos themselves. A phone sends the whole document after a
 change, with If-Match, so a phone that never synced (or was reinstalled) can't wipe the copy here
 by accident: it has to take this copy, or say on purpose that its own replaces it (If-Match: *).
-Made to run on a small home server next to Radicale, published under a path (/xrnwallet) by a
-reverse proxy such as Tailscale Funnel, which may or may not strip that prefix. Standard library
-only, plus `bcrypt` to read an htpasswd file, so the calendar password is the sync password.
+Made to run on a small home server next to Radicale, published under a path (/xrnwal) by a
+reverse proxy such as Tailscale Funnel, which may or may not strip that prefix. The app was called
+xrnwallet before, and its path /xrnwallet is taken the same way. Standard library only, plus
+`bcrypt` to read an htpasswd file, so the calendar password is the sync password.
 
     GET  /state               200, the document; ETag: "<version>" (0 while there is none)
                               If-None-Match: "<version>" -> 304 when unchanged
@@ -39,7 +40,7 @@ from before tags, the number decides alone. The ETag stays a bare number for tho
 Every write keeps the copy it replaces: the last KEEP_VERSIONS of them in history/, and the first
 of each day in daily/ for KEEP_DAYS. A photo goes once none of those name it any more.
 
-    python3 xrnwallet-sync.py --data ~/xrnwallet-sync/data --users ~/.config/xrn-sync/users
+    python3 xrnwal-sync.py --data ~/xrnwal-sync/data --users ~/.config/xrn-sync/users
 """
 import argparse
 import base64
@@ -68,7 +69,9 @@ KEEP_DAYS = 60
 KEEP_TAGS = 1000  # a phone this many writes behind is asked, as it can't be told it's on the same line
 PRUNE_EVERY_S = 600  # photos are swept at most this often per user
 PHOTO_GRACE_S = 86400  # a photo this new stays even if nothing names it yet
-PREFIX = "/xrnwallet"
+# The path a proxy may pass on, and the one from before the app was renamed, which phones set up
+# then still use until they are moved over.
+PREFIXES = ("/xrnwal", "/xrnwallet")
 USER_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
 # The same rule as the app's isSafePhotoName: a plain file name, no path, no leading dot.
 PHOTO_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}")
@@ -412,7 +415,7 @@ LOG_ESCAPES = str.maketrans({**{c: f"\\x{c:02x}" for c in (*range(0x20), *range(
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "xrnwallet-sync/1"
+    server_version = "xrnwal-sync/1"
     sys_version = ""  # the Server header named the Python version too
     timeout = 120  # seconds of silence before a connection is dropped, so a stalled client can't hold a thread
 
@@ -442,8 +445,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def route(self):
         path = self.path.partition("?")[0]
-        if path == PREFIX or path.startswith(PREFIX + "/"):
-            path = path[len(PREFIX):] or "/"
+        for prefix in PREFIXES:
+            if path == prefix or path.startswith(prefix + "/"):
+                return path[len(prefix):] or "/"
         return path
 
     def send(self, code, body=b"", ctype="text/plain; charset=utf-8", headers=None):
@@ -543,7 +547,7 @@ class Handler(BaseHTTPRequestHandler):
         if not user:
             if header:  # a request with none guessed nothing, and needn't hold a thread for it
                 time.sleep(FAIL_DELAY_S)
-            self.send(401, "login required", headers={"WWW-Authenticate": 'Basic realm="xrnwallet"'})
+            self.send(401, "login required", headers={"WWW-Authenticate": 'Basic realm="xrnwal"'})
             return None
         return user
 
@@ -684,7 +688,7 @@ def main():
     args.users = os.path.expanduser(args.users)
     srv = ThreadingHTTPServer((args.host, args.port), Handler)
     srv.daemon_threads = True
-    sys.stderr.write(f"xrnwallet-sync on http://{args.host}:{args.port}, data in {args.data}\n")
+    sys.stderr.write(f"xrnwal-sync on http://{args.host}:{args.port}, data in {args.data}\n")
     srv.serve_forever()
 
 

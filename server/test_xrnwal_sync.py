@@ -1,6 +1,6 @@
-"""Tests for xrnwallet-sync.py: the If-Match rule, the upload hash, earlier copies, photos, logins.
+"""Tests for xrnwal-sync.py: the If-Match rule, the upload hash, earlier copies, photos, logins.
 
-    python3 -m unittest server/test_xrnwallet_sync.py     (from the repo root; needs bcrypt)
+    python3 -m unittest server/test_xrnwal_sync.py     (from the repo root; needs bcrypt)
 """
 import base64
 import gzip
@@ -23,7 +23,7 @@ from concurrent.futures import ThreadPoolExecutor
 from http.server import ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-spec = importlib.util.spec_from_file_location("xrnwallet_sync", os.path.join(HERE, "xrnwallet-sync.py"))
+spec = importlib.util.spec_from_file_location("xrnwal_sync", os.path.join(HERE, "xrnwal-sync.py"))
 srv = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(srv)
 
@@ -91,9 +91,17 @@ class SyncServerTest(unittest.TestCase):
         self.assertEqual(json.loads(body)["bills"][0]["note"], "Lunch")
 
     def test_the_path_works_with_and_without_the_prefix(self):
-        self.assertEqual(self.call("GET", "/xrnwallet/health", password=None)[1], b"ok")
+        self.assertEqual(self.call("GET", "/xrnwal/health", password=None)[1], b"ok")
         self.assertEqual(self.call("GET", "/health", password=None)[1], b"ok")
+        self.assertEqual(self.call("PUT", "/xrnwal/state", document("a"), {"If-Match": '"0"'})[0], 200)
+        self.assertEqual(self.call("GET", "/xrnwalx/health", password=None)[0], 404)
+
+    def test_the_path_from_before_the_rename_still_reaches_the_same_copy(self):
+        # Phones set up as xrnwallet send /xrnwallet/... through a proxy that keeps the prefix.
+        self.assertEqual(self.call("GET", "/xrnwallet/health", password=None)[1], b"ok")
         self.assertEqual(self.call("PUT", "/xrnwallet/state", document("a"), {"If-Match": '"0"'})[0], 200)
+        status, body, headers = self.call("GET", "/xrnwal/state")
+        self.assertEqual((status, json.loads(body)["bills"][0]["note"], headers["ETag"]), (200, "a", '"1"'))
 
     def test_a_stale_write_is_refused_and_changes_nothing(self):
         self.put(document("first"), '"0"')
