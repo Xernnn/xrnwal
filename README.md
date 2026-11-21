@@ -10,7 +10,7 @@ Your data lives on the phone. Only two things use the network: the sync, if you 
 the exchange-rate refresh, which sends the base currency code and runs only when you press the
 refresh button.
 
-Kotlin and Jetpack Compose, with Room for storage. Minimum Android 8.0. Version 0.5.3 (build 12).
+Kotlin and Jetpack Compose, with Room for storage. Minimum Android 8.0. Version 0.6.0 (build 13).
 Laid out and working like the money app it replaced, in its own code and with its own artwork; see
 [where it differs](#where-it-differs-from-money-manager). It was called xrnwallet
 (`com.xern.xrnwallet`) until 0.6.0; see [moving from xrnwallet](#moving-from-xrnwallet).
