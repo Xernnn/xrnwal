@@ -26,15 +26,33 @@ jobs:
         run: ./gradlew :app:testDebugUnitTest :app:assembleDebug :app:lintDebug --console=plain
 
       # The server steps run even when the app checks fail, since they don't depend on them.
-      # Not the runner's own Python: Ubuntu's 3.12.3 answers a garbage request line with no
+      # On the oldest and newest Python a server may run on: how deep json.loads nests changed in
+      # 3.14. Not the runner's own Python: Ubuntu's 3.12.3 answers a garbage request line with no
       # status line (fixed in later CPython), which test_an_unparseable_request_gets_an_answer catches.
       - uses: actions/setup-python@v7
+        id: py312
+        if: ${{ !cancelled() }}
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-python@v7
+        id: py314
         if: ${{ !cancelled() }}
         with:
           python-version: "3.14"
 
-      - name: Sync server and deploy tests
+      - name: Sync server and deploy tests, Python 3.12
         if: ${{ !cancelled() }}
         run: |
-          pip install --quiet bcrypt
-          python -m unittest server/test_xrnwal_sync.py server/test_deploy.py
+          py="${{ steps.py312.outputs.python-path }}"
+          "$py" --version
+          "$py" -m pip install --quiet bcrypt
+          "$py" -m unittest server/test_xrnwal_sync.py server/test_deploy.py
+
+      - name: Sync server and deploy tests, Python 3.14
+        if: ${{ !cancelled() }}
+        run: |
+          py="${{ steps.py314.outputs.python-path }}"
+          "$py" --version
+          "$py" -m pip install --quiet bcrypt
+          "$py" -m unittest server/test_xrnwal_sync.py server/test_deploy.py
