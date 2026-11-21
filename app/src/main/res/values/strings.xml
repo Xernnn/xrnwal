@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">xrnwallet</string>
+    <string name="app_name">xrnwal</string>
     <string name="widget_today_about">Today\'s expenses and income</string>
     <string name="widget_month_about">This month\'s expenses, income and balance</string>
     <string name="widget_today_light">Today, Light</string>

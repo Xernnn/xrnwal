@@ -21,6 +21,8 @@ local.properties
 *.db-shm
 *.db-wal
 *.sqlite
+xrnwal-backup-*.json
+# and those the app made before it was renamed
 xrnwallet-backup-*.json
 !app/src/test/resources/**/*.csv
 __pycache__/

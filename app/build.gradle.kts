@@ -7,11 +7,11 @@ plugins {
 }
 
 android {
-    namespace = "com.xern.xrnwallet"
+    namespace = "com.xern.xrnwal"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.xern.xrnwallet"
+        applicationId = "com.xern.xrnwal"
         minSdk = 26
         targetSdk = 35
         versionCode = 12

@@ -31,7 +31,7 @@ from xml.etree import ElementTree
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SOURCES = os.path.join(REPO, "app", "src", "main", "java")
 DRAWABLES = os.path.join(REPO, "app", "src", "main", "res", "drawable")
-KOTLIN = os.path.join(SOURCES, "com", "xern", "xrnwallet", "ui", "FluentArt.kt")
+KOTLIN = os.path.join(SOURCES, "com", "xern", "xrnwal", "ui", "FluentArt.kt")
 TREE_URL = "https://api.github.com/repos/microsoft/fluentui-emoji/git/trees/main?recursive=1"
 RAW_URL = "https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/"
 SVG = "{http://www.w3.org/2000/svg}"
@@ -82,7 +82,7 @@ def folder_guess(emoji):
 
 
 def fetch(url):
-    req = urllib.request.Request(url, headers={"User-Agent": "xrnwallet-icons"})
+    req = urllib.request.Request(url, headers={"User-Agent": "xrnwal-icons"})
     with urllib.request.urlopen(req, timeout=30) as r:
         return r.read()
 
@@ -360,7 +360,7 @@ def resource_name(emoji):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--cache", default=os.path.expanduser("~/.cache/xrnwallet-fluent"))
+    p.add_argument("--cache", default=os.path.expanduser("~/.cache/xrnwal-fluent"))
     args = p.parse_args()
     os.makedirs(args.cache, exist_ok=True)
     flat = flat_paths(args.cache)
@@ -387,7 +387,7 @@ def main():
             f.write(xml)
         made[emoji] = resource_name(emoji)
     with open(KOTLIN, "w", encoding="utf-8") as f:
-        f.write("package com.xern.xrnwallet.ui\n\nimport com.xern.xrnwallet.R\n\n")
+        f.write("package com.xern.xrnwal.ui\n\nimport com.xern.xrnwal.R\n\n")
         f.write("// Made by tools/fluent_icons.py from Microsoft's Fluent Emoji (Flat), MIT licence. Don't edit by hand.\n\n")
         f.write("/** The colour drawing for each emoji the app names, keyed without variation selectors. */\n")
         f.write("internal val fluentDrawables: Map<String, Int> = mapOf(\n")
