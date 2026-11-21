@@ -1,8 +1,8 @@
-# xrnwallet feature spec
+# xrnwal feature spec
 
-Behavioural spec for xrnwallet, written from a screen-by-screen walkthrough of the app it replaces.
-It records what the app must do. Code, art, icons, mascot and branding are all our own: features
-and workflows are matched, assets are not.
+Behavioural spec for xrnwal (xrnwallet until 0.6.0), written from a screen-by-screen walkthrough of
+the app it replaces. It records what the app must do. Code, art, icons, mascot and branding are all
+our own: features and workflows are matched, assets are not.
 
 ## Navigation
 

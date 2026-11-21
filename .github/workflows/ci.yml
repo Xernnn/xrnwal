@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  # One job on purpose: this repo is private, so every runner minute counts.
+  # One job on purpose, to keep runner minutes down.
   check:
     runs-on: ubuntu-latest
     steps:
@@ -33,8 +33,8 @@ jobs:
         with:
           python-version: "3.14"
 
-      - name: Sync server tests
+      - name: Sync server and deploy tests
         if: ${{ !cancelled() }}
         run: |
           pip install --quiet bcrypt
-          python -m unittest server/test_xrnwallet_sync.py
+          python -m unittest server/test_xrnwal_sync.py server/test_deploy.py

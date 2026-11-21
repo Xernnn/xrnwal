@@ -20,6 +20,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "xrnwallet"
+rootProject.name = "xrnwal"
 
 include(":app")
