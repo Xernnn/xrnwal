@@ -378,6 +378,27 @@ class SyncServerTest(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertEqual(self.call("GET", "/state")[2]["ETag"], '"0"')
 
+    def test_a_document_too_deep_to_write_back_is_refused_before_anything_is_written(self):
+        # json.loads takes a few thousand levels (tens of thousands on Python 3.14), json.dump only
+        # about a thousand. A document in between was taken, the copy it replaced was filed as an
+        # earlier one, and then writing it raised RecursionError: the connection closed with no
+        # answer, after a write that never happened.
+        self.put(document("kept"), '"0"')
+        deep = b'{"bills":[{"id":0,"tags":' + b"[" * 2000 + b"]" * 2000 + b"}]}"
+        status, body, _ = self.call("PUT", "/state", deep, {"If-Match": '"1"'}, raw=True)
+        self.assertEqual(status, 400)
+        self.assertIn(b"nested", body)
+        self.assertEqual(self.call("GET", "/state")[2]["ETag"], '"1"')
+        self.assertEqual(json.loads(self.call("GET", "/versions")[1]), [])
+
+    def test_a_document_nested_up_to_the_limit_is_taken(self):
+        def nested(depth):  # {"bills": [{"tags": [[...]]}]}: the object holding bills is level 1
+            return b'{"bills":[{"id":0,"tags":' + b"[" * (depth - 3) + b"]" * (depth - 3) + b"}]}"
+        status, _, headers = self.call("PUT", "/state", nested(srv.MAX_DEPTH), {"If-Match": '"0"'}, raw=True)
+        self.assertEqual((status, headers["ETag"]), (200, '"1"'))
+        status, _, _ = self.call("PUT", "/state", nested(srv.MAX_DEPTH + 1), {"If-Match": '"1"'}, raw=True)
+        self.assertEqual(status, 400)
+
     def cut_upload(self, reset):
         """A PUT /state whose body stops half way, then the connection closes, as Funnel closes
         it when the phone's side drops: with [reset], hard, before any answer can come back."""
