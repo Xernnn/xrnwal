@@ -87,6 +87,15 @@ object BackupReader {
         if (problem != null) throw UnusableBackup(problem)
         return backup
     }
+
+    /**
+     * The photo files a copy names, by file name alone, leaving out any name that isn't a plain file
+     * name. A backup file keeps each as a path on the phone that made it, in the folder of an app id
+     * that may not be this one (xrnwallet's, before the rename).
+     */
+    fun photoNames(body: String): List<String> =
+        json.decodeFromString<Backup>(body).bills.mapNotNull { it.photo }.map { File(it).name }
+            .filter(::isSafePhotoName).distinct()
 }
 
 object PhotoFiles {
@@ -491,10 +500,8 @@ class Repository(
         ),
     )
 
-    /** The photo files a server copy names, leaving out any name that isn't a plain file name. */
-    fun photosIn(body: String): List<String> =
-        json.decodeFromString<Backup>(body).bills.mapNotNull { it.photo }.map { File(it).name }
-            .filter(::isSafePhotoName).distinct()
+    /** See [BackupReader.photoNames]. */
+    fun photosIn(body: String): List<String> = BackupReader.photoNames(body)
 
     fun photoFile(name: String): File = File(File(context.filesDir, "photos"), name)
 

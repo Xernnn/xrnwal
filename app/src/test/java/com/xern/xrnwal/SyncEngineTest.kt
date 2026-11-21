@@ -1,6 +1,12 @@
 package com.xern.xrnwal
 
+import com.xern.xrnwal.data.Account
+import com.xern.xrnwal.data.Backup
+import com.xern.xrnwal.data.BackupReader
+import com.xern.xrnwal.data.BillType
+import com.xern.xrnwal.data.Category
 import com.xern.xrnwal.data.EarlierCopy
+import com.xern.xrnwal.data.Ledger
 import com.xern.xrnwal.data.PushResult
 import com.xern.xrnwal.data.ServerAddress
 import com.xern.xrnwal.data.ServerCopy
@@ -16,6 +22,8 @@ import com.xern.xrnwal.data.SyncedWallet
 import com.xern.xrnwal.data.isSafePhotoName
 import com.xern.xrnwal.data.sha256
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -120,8 +128,12 @@ private class FakeServer : SyncServer {
     }
 }
 
-/** A wallet whose whole content is a line of text, with photos named after a `|`. */
-private class FakeWallet(private val folder: File, var content: String) : SyncedWallet {
+/** A wallet whose whole content is a line of text, with photos named after a `|` unless [names] says otherwise. */
+private class FakeWallet(
+    private val folder: File,
+    var content: String,
+    private val names: (String) -> List<String> = { it.substringAfter('|', "").split(',').filter(String::isNotEmpty) },
+) : SyncedWallet {
     var replaced = 0
 
     /** A bill saved just as a copy is about to replace this one, and one saved just after. Each happens once. */
@@ -138,7 +150,7 @@ private class FakeWallet(private val folder: File, var content: String) : Synced
         return sha256(content).also { afterReplace?.also { afterReplace = null }?.invoke() }
     }
 
-    override fun photosIn(body: String) = body.substringAfter('|', "").split(',').filter { it.isNotEmpty() }
+    override fun photosIn(body: String) = names(body)
     override fun photoFile(name: String) = File(folder, name)
 }
 
@@ -379,6 +391,38 @@ class SyncEngineTest {
         assertEquals("bills", server.body)
         assertEquals(listOf("the server's"), server.history.map { it.body })
         assertEquals(SyncOutcome.UpToDate, engine.sync())
+    }
+
+    @Test fun aFreshInstallMeetingTheCopyXrnwalletLeftAsksThenTakesItWithItsPhoto() = runBlocking {
+        // Sent by xrnwallet 0.5.3, before the rename, from a made-up wallet. Its photo is on the server too.
+        val old = javaClass.getResource("/old-app/server-copy-0.5.3.json")!!.readText()
+        server.write(old)
+        server.photos["1731900000000-4f2a.jpg"] = byteArrayOf(1, 2, 3)
+        val json = Json { encodeDefaults = true }
+        // What a new install holds before it first syncs: the ledger, the account and categories it starts with.
+        val fresh = json.encodeToString(
+            Backup(
+                settings = json.encodeToString(Settings()), ledgers = listOf(Ledger(id = 1, name = "General")),
+                accounts = listOf(Account(id = 1, name = "Cash", icon = "💵")),
+                categories = listOf(Category(id = 1, type = BillType.EXPENSE, name = "Food", icon = "🍜")),
+                tags = emptyList(), bills = emptyList(), billTags = emptyList(), budgets = emptyList(), recurring = emptyList(),
+                plans = emptyList(), deposits = emptyList(), checklists = emptyList(), checklistItems = emptyList(),
+                reminders = emptyList(), rates = emptyList(),
+            ),
+        )
+        val phone = FakeWallet(folder.root, fresh, BackupReader::photoNames)
+        val newApp = SyncEngine(server, phone, meta, { true }, { 1000L })
+        // Connecting asks, and "Use the server's copy" takes it.
+        assertConflict(newApp.sync())
+        assertEquals(old, server.body)
+        assertEquals(fresh, phone.content)
+        newApp.keepServer()
+        assertEquals(old, phone.content)
+        assertEquals(listOf("Lunch", "Opal top-up", "Café shifts", "Phở", ""), BackupReader.read(phone.content).bills.map { it.note })
+        assertArrayEquals(byteArrayOf(1, 2, 3), File(folder.root, "1731900000000-4f2a.jpg").readBytes())
+        assertEquals(old, server.body)
+        assertTrue(fresh in server.history.map { it.body })
+        assertEquals(SyncOutcome.UpToDate, newApp.sync())
     }
 
     @Test fun keepingTheServerFilesThePhonesCopyFirst() = runBlocking {

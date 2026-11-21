@@ -91,7 +91,7 @@ build only accepts `https://` addresses.
 ## Build and test
 
 ```sh
-./gradlew :app:testDebugUnitTest      # 161 unit tests
+./gradlew :app:testDebugUnitTest      # 164 unit tests
 ANDROID_USER_HOME=$HOME/.android ./gradlew :app:assembleRelease   # app/build/outputs/apk/release/app-release.apk
 adb install -r app/build/outputs/apk/release/app-release.apk
 ANDROID_USER_HOME=$HOME/.android ./gradlew :app:assembleDebug     # app/build/outputs/apk/debug/app-debug.apk

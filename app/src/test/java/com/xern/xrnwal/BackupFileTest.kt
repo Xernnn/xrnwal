@@ -83,6 +83,27 @@ class BackupFileTest {
     }
 
     @Test
+    fun aBackupFileXrnwalletMadeStillRestores() {
+        // Written by xrnwallet 0.5.3, before the rename, from a made-up wallet.
+        val into = folder.newFolder()
+        val rest = javaClass.getResourceAsStream("/old-app/backup-0.5.3.json")!!.use { BackupFile.read(it, into) }
+        val backup = BackupReader.read(rest)
+        assertEquals(3, backup.version)
+        assertEquals(listOf("Lunch", "Opal top-up", "Café shifts", "Phở", ""), backup.bills.map { it.note })
+        assertEquals(listOf("Cash", "Everyday"), backup.accounts.map { it.name })
+        assertEquals(listOf(85_400L), backup.adjustments.map { it.afterCents })
+        assertEquals(listOf(1L to 40_000L), backup.budgets.filter { it.categoryId != null }.map { it.categoryId to it.amountCents })
+        val settings = json.decodeFromString<Settings>(backup.settings)
+        assertEquals("Alex", settings.nickname)
+        assertEquals(false, settings.locked)
+        // Its photo is named by the old app's folder. Restoring goes by the file name alone, which is here.
+        val photo = backup.bills.mapNotNull { it.photo }.single()
+        assertTrue(photo.startsWith("/data/user/0/com.xern.xrnwallet/files/photos/"))
+        assertEquals(listOf("1731900000000-4f2a.jpg"), into.list()!!.toList())
+        assertArrayEquals(ByteArray(3_000) { (it * 31 % 251).toByte() }, File(into, File(photo).name).readBytes())
+    }
+
+    @Test
     fun whatIsNotABackupIsRefused() {
         val whole = json.encodeToString(backup(mapOf("tiny.jpg" to Base64.getEncoder().encodeToString(small))))
         for (text in listOf("", "hello", "[1,2]", whole.dropLast(20), whole.replace("AQIDBA==", "AQ!DBA=="))) {
