@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- What a just-placed Pace widget shows in its light look until its figures are drawn, a second or so. -->
+<!-- What a just-placed widget shows in the phone's look until its figures are drawn, a second or so. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:theme="@style/WidgetLook.Pace.Light">
+    android:theme="@style/WidgetLook.Auto">
 
     <ImageView
         android:layout_width="match_parent"

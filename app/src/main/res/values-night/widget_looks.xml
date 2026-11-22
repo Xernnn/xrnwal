@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- In dark mode the widgets take Moss (values/widget_looks.xml). -->
+<resources>
+    <style name="WidgetLook.Auto" parent="WidgetLook.Moss" />
+</resources>

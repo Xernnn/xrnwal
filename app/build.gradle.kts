@@ -14,8 +14,8 @@ android {
         applicationId = "com.xern.xrnwal"
         minSdk = 26
         targetSdk = 35
-        versionCode = 15
-        versionName = "0.7.0"
+        versionCode = 16
+        versionName = "0.7.1"
     }
 
     buildTypes {

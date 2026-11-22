@@ -14,12 +14,6 @@ import java.time.LocalDate
 import java.time.YearMonth
 import java.time.temporal.ChronoUnit
 
-/** One day's spending, for a widget's bar chart. */
-data class DaySpend(val date: LocalDate, val cents: Long)
-
-/** A bar's height as a share of the chart's, and whether its day spent more than the chart has room for. */
-data class Bar(val height: Float, val clipped: Boolean)
-
 /**
  * This month's spending against what it may spend: the overall budget when one is set and budgets are
  * on, else the month's income. [limit] is 0 when there is neither.
@@ -67,12 +61,10 @@ data class MoneyParts(val lead: String, val whole: String, val fraction: String)
 }
 
 /**
- * What the Pace and Rhythm widgets draw beyond [WidgetFigures]: the last seven days' and this month's
- * spending day by day, and the month's pace. [month] is the accounting month today falls in.
+ * What the widgets draw beyond [WidgetFigures]: today, the accounting month it falls in, and that
+ * month's pace.
  */
 data class WidgetSeries(
-    val week: List<DaySpend>,
-    val days: List<DaySpend>,
     val today: LocalDate,
     val month: YearMonth,
     val pace: Pace,
@@ -85,36 +77,10 @@ data class WidgetSeries(
             val ledgerBills = s.inLedger(s.activeLedger(settings))
             val counted = if (settings.includeFuture) ledgerBills else ledgerBills.filter { it.date <= today }
             return WidgetSeries(
-                week = daily(counted, DateRange(today.minusDays(6), today)),
-                days = daily(counted, range),
                 today = today,
                 month = month,
                 pace = pace(s, settings, counted, range, today),
             )
-        }
-
-        /** Each day's expenses in [range], every day listed, oldest first. */
-        fun daily(bills: List<Bill>, range: DateRange): List<DaySpend> {
-            val byDay = bills.filter { it.type == BillType.EXPENSE && it.date in range }
-                .groupBy { it.date }
-                .mapValues { (_, group) -> group.sumOf { it.baseCents } }
-            return generateSequence(range.start) { it.plusDays(1) }
-                .takeWhile { it <= range.endInclusive }
-                .map { DaySpend(it, byDay[it] ?: 0) }
-                .toList()
-        }
-
-        /**
-         * Bar heights for [values]. One rent day would flatten every other bar, so with four or more days
-         * of spending the chart tops out at three times the middle day's, and a day above that is drawn
-         * full height and marked as clipped.
-         */
-        fun bars(values: List<Long>): List<Bar> {
-            val spending = values.filter { it > 0 }.sorted()
-            if (spending.isEmpty()) return values.map { Bar(0f, false) }
-            val top = spending.last()
-            val cap = if (spending.size >= 4) minOf(top, spending[spending.size / 2] * 3) else top
-            return values.map { Bar(it.coerceIn(0, cap).toFloat() / cap, it > cap) }
         }
 
         /** The month's pace, counted as the Home page's budget card counts it when there is a budget. */

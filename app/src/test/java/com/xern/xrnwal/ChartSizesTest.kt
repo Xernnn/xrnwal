@@ -14,20 +14,17 @@ class ChartSizesTest {
     /** What one widget update may carry in bitmaps on that phone: 1.5 times the screen's pixels. */
     private val remoteViewsLimit = 1080L * 2400 * 4 * 3 / 2
 
-    private fun all(widthDp: Float, heightDp: Float) = listOf(
-        ChartSizes.paceRing(widthDp, heightDp),
-        ChartSizes.paceBar(widthDp),
-        ChartSizes.week(widthDp, heightDp),
-        ChartSizes.month(widthDp, heightDp),
-    )
+    private fun all(widthDp: Float, heightDp: Float) = listOf(ChartSizes.dial(widthDp, heightDp), ChartSizes.bar(widthDp))
 
     @Test
     fun chartsAtTheirPlacedSizeAreDrawnAtFullSharpness() {
-        val ring = ChartSizes.paceRing(172f, 172f)
-        assertEquals(ChartSizes.Pixels((ring.widthDp * density).toInt(), (ring.heightDp * density).toInt()), ChartSizes.pixels(ring, density))
-        val month = ChartSizes.month(361f, 172f)
-        assertEquals(ChartSizes.Pixels((329 * density).toInt(), (month.heightDp * density).toInt()), ChartSizes.pixels(month, density))
-        all(361f, 172f).forEach { assertTrue(ChartSizes.pixels(it, density).bytes <= ChartSizes.MAX_BYTES) }
+        // Two by two and four by two on the Redmi Note 14's home screen: 173 by 187 dp and 376 by 187 dp.
+        val ring = ChartSizes.dial(173f, 187f)
+        assertEquals(ChartSizes.Chart(135f, 135f), ring)
+        assertEquals(ChartSizes.Pixels((135 * density).toInt(), (135 * density).toInt()), ChartSizes.pixels(ring, density))
+        val bar = ChartSizes.bar(376f)
+        assertEquals(ChartSizes.Pixels((344 * density).toInt(), (18 * density).toInt()), ChartSizes.pixels(bar, density))
+        all(376f, 187f).forEach { assertTrue(ChartSizes.pixels(it, density).bytes <= ChartSizes.MAX_BYTES) }
     }
 
     @Test
@@ -35,7 +32,8 @@ class ChartSizesTest {
         all(screenWidthDp, screenHeightDp).forEach { chart ->
             val px = ChartSizes.pixels(chart, density)
             assertTrue("$chart is ${px.bytes} bytes", px.bytes <= ChartSizes.MAX_BYTES)
-            assertTrue(px.bytes * 10 < remoteViewsLimit)
+            // Drawn once for light mode and once for dark, with room to spare.
+            assertTrue(2 * px.bytes * 5 < remoteViewsLimit)
         }
     }
 
@@ -50,7 +48,7 @@ class ChartSizesTest {
     @Test
     fun aWidgetShrunkBelowItsMinimumStillGetsAChart() {
         all(40f, 40f).forEach { chart ->
-            assertTrue(chart.widthDp >= 40f && chart.heightDp >= 20f)
+            assertTrue(chart.widthDp >= 40f && chart.heightDp >= 18f)
         }
     }
 }

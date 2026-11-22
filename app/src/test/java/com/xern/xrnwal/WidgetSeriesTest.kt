@@ -6,8 +6,6 @@ import com.xern.xrnwal.data.Budget
 import com.xern.xrnwal.data.Ledger
 import com.xern.xrnwal.data.Settings
 import com.xern.xrnwal.data.Snapshot
-import com.xern.xrnwal.domain.DateRange
-import com.xern.xrnwal.work.Bar
 import com.xern.xrnwal.work.MoneyParts
 import com.xern.xrnwal.work.WidgetSeries
 import org.junit.Assert.assertEquals
@@ -40,37 +38,6 @@ class WidgetSeriesTest {
 
     private val ledgers = listOf(Ledger(id = 1, name = "General"), Ledger(id = 2, name = "Trip"))
     private val settings = Settings(activeLedger = 1, includeFuture = false)
-
-    @Test
-    fun dailyListsEveryDayWithItsExpensesOnly() {
-        val bills = listOf(
-            bill(1, today, 1200),
-            bill(2, today, 300),
-            bill(3, today.minusDays(2), 500),
-            bill(4, today.minusDays(2), 9000, type = BillType.INCOME),
-            bill(5, today.minusDays(1), 700, type = BillType.TRANSFER),
-            bill(6, today.minusDays(9), 4000),
-        )
-        val days = WidgetSeries.daily(bills, DateRange(today.minusDays(3), today))
-        assertEquals(listOf(today.minusDays(3), today.minusDays(2), today.minusDays(1), today), days.map { it.date })
-        assertEquals(listOf(0L, 500L, 0L, 1500L), days.map { it.cents })
-    }
-
-    @Test
-    fun oneRentDayIsClippedSoTheOtherBarsKeepTheirHeight() {
-        val bars = WidgetSeries.bars(listOf(165_000, 2_000, 4_000, 0, 3_000, 6_000, 5_000))
-        // The middle of the six spending days is 5.000, so the chart tops out at 15.000.
-        assertEquals(Bar(1f, true), bars[0])
-        assertEquals(2_000f / 15_000, bars[1].height, 0.0001f)
-        assertEquals(Bar(0f, false), bars[3])
-        assertFalse(bars.drop(1).any { it.clipped })
-    }
-
-    @Test
-    fun fewSpendingDaysAreScaledToTheLargest() {
-        assertEquals(listOf(Bar(1f, false), Bar(0.25f, false), Bar(0f, false)), WidgetSeries.bars(listOf(8_000, 2_000, 0)))
-        assertEquals(listOf(Bar(0f, false), Bar(0f, false)), WidgetSeries.bars(listOf(0, 0)))
-    }
 
     @Test
     fun paceFollowsTheOverallBudgetAcrossLedgersWhenOneIsSet() {
@@ -127,27 +94,22 @@ class WidgetSeriesTest {
     }
 
     @Test
-    fun weekEndsTodayAndMonthFollowsTheStartDay() {
+    fun theMonthFollowsTheStartDay() {
         val s = Snapshot(ledgers = ledgers, bills = listOf(bill(1, today, 1_000), bill(2, today.minusDays(6), 2_000)))
         val series = WidgetSeries.of(s, settings.copy(startDay = 25), today)
-        assertEquals(7, series.week.size)
-        assertEquals(today, series.week.last().date)
-        assertEquals(listOf(2_000L, 0L, 0L, 0L, 0L, 0L, 1_000L), series.week.map { it.cents })
-        assertEquals(LocalDate.of(2026, 10, 25), series.days.first().date)
-        assertEquals(LocalDate.of(2026, 11, 24), series.days.last().date)
-        assertEquals(29, series.pace.day)
         assertEquals(java.time.YearMonth.of(2026, 10), series.month)
+        assertEquals(29, series.pace.day)
+        assertEquals(31, series.pace.days)
+        assertEquals(3_000L, series.pace.spent)
+        assertEquals(1_000L, series.pace.spentToday)
     }
 
     @Test
-    fun anEmptyMonthIsAllZeroDaysAndNoLimit() {
+    fun anEmptyMonthHasNoSpendingAndNoLimit() {
         val series = WidgetSeries.of(Snapshot(ledgers = ledgers), settings, today)
-        assertEquals(7, series.week.size)
-        assertTrue(series.week.all { it.cents == 0L })
-        assertEquals(30, series.days.size)
-        assertTrue(series.days.all { it.cents == 0L })
-        assertEquals(listOf(Bar(0f, false)), WidgetSeries.bars(listOf(0)))
         assertEquals(0L, series.pace.spent)
+        assertEquals(0L, series.pace.spentToday)
+        assertEquals(0L, series.pace.limit)
         assertEquals(0L, series.pace.left)
         assertEquals(0L, series.pace.perDay)
     }
@@ -169,9 +131,8 @@ class WidgetSeriesTest {
         assertEquals(300_000L / 30, pace.allowanceToday)
         assertEquals(165_000L, pace.spentToday)
         assertTrue(pace.ahead)
-        // Last month's last day is in the week but not the month.
-        assertEquals(9_000L, series.week[5].cents)
-        assertEquals(165_000L, series.days.first().cents)
+        // Last month's last day isn't in the month.
+        assertEquals(165_000L, pace.spent)
     }
 
     @Test
