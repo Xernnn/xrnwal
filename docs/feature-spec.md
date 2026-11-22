@@ -286,22 +286,21 @@ Every gesture also has a visible way to do the same thing.
 
 ### Widgets
 
-Two designs, each in a two-by-two Today and a four-by-two Month, in Light and Dark: eight in the
-picker, Pace first.
+Two in the picker, each in the tile's olive: pale (Sage) while the phone is in light mode and deep
+(Moss) in dark, switching with it.
 
-- Pace, Today: the day's spending in an open ring that fills towards what today may spend, the
-  budget left this morning shared over the days still to come. Month: the period's spending of its
-  budget, what is left and what each day may spend, over a bar with a mark at how far through the
-  month today is. Both turn red once spending runs ahead. With no budget (or budgets off) they
-  compare with the month's income; with neither, Month shows income and balance and an empty bar.
-- Rhythm, Today: the day's spending over the last seven days' bars, today's lit, weekday letters
-  under them. Month: the period's spending, income and balance over a bar for each of its days,
-  days to come as dots. A day of more than three times the middle day's spending (rent) is drawn
-  full height with a break, so the others keep their height.
+- Today, two by two: the day's spending in an open ring that fills towards what today may spend,
+  the budget left this morning shared over the days still to come, the date under it. Past what
+  today may spend, the ring is all ink.
+- Month, four by two: the period's spending of its budget, then a thick bar with a mark at how far
+  through the month today is, then what is left and what each day may spend. Spending beyond the
+  mark is drawn in ink.
 
-Every widget opens the app when tapped, and its + opens a new bill. The figures use the Home header's
-rules for the active ledger, future bills, carryover and start of month; Pace counts the budget as the
-budget card does. They redraw after any change, including any setting, hourly, and when a widget is
+With no budget (or budgets off) both compare with the month's income; with neither, Month shows
+income and balance and an empty bar. A Month placed under 0.7.0's Pace · Month · Dark carries on as
+Month. Every widget opens the app when tapped, and its + opens a new bill. The figures use the Home
+header's rules for the active ledger, future bills, carryover and start of month, and count the
+budget as the budget card does. They redraw after any change, including any setting, hourly, and when a widget is
 resized, at its new size. While an app lock is set, amounts are dots and the charts are drawn empty,
 and the + still works because the new bill page opens behind the lock screen.
 
