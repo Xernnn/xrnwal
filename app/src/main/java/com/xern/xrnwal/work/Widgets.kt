@@ -6,8 +6,9 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.widget.RemoteViews
+import android.os.Bundle
 import androidx.annotation.LayoutRes
+import androidx.annotation.StyleRes
 import com.xern.xrnwal.MainActivity
 import com.xern.xrnwal.R
 import com.xern.xrnwal.WalletApp
@@ -60,16 +61,32 @@ data class WidgetFigures(val today: Totals, val month: Totals, val balance: Long
 }
 
 object WalletWidgets {
-    private class Look(val provider: Class<out WalletWidget>, @LayoutRes val layout: Int, val month: Boolean)
+    /** A widget in the picker: its provider, its design and size, and the look its layout is themed with. */
+    enum class Kind(
+        val provider: Class<out WalletWidget>,
+        val design: WidgetViews.Design,
+        val month: Boolean,
+        @LayoutRes val layout: Int,
+        @StyleRes val style: Int,
+    ) {
+        PACE_TODAY_LIGHT(PaceTodayLightWidget::class.java, WidgetViews.Design.PACE, false, R.layout.widget_pace_today_light, R.style.WidgetLook_Pace_Light),
+        PACE_TODAY_DARK(PaceTodayDarkWidget::class.java, WidgetViews.Design.PACE, false, R.layout.widget_pace_today_dark, R.style.WidgetLook_Pace_Dark),
+        PACE_MONTH_LIGHT(PaceMonthLightWidget::class.java, WidgetViews.Design.PACE, true, R.layout.widget_pace_month_light, R.style.WidgetLook_Pace_Light),
+        PACE_MONTH_DARK(PaceMonthDarkWidget::class.java, WidgetViews.Design.PACE, true, R.layout.widget_pace_month_dark, R.style.WidgetLook_Pace_Dark),
+        RHYTHM_TODAY_LIGHT(RhythmTodayLightWidget::class.java, WidgetViews.Design.RHYTHM, false, R.layout.widget_rhythm_today_light, R.style.WidgetLook_Rhythm_Light),
+        RHYTHM_TODAY_DARK(RhythmTodayDarkWidget::class.java, WidgetViews.Design.RHYTHM, false, R.layout.widget_rhythm_today_dark, R.style.WidgetLook_Rhythm_Dark),
+        RHYTHM_MONTH_LIGHT(RhythmMonthLightWidget::class.java, WidgetViews.Design.RHYTHM, true, R.layout.widget_rhythm_month_light, R.style.WidgetLook_Rhythm_Light),
+        RHYTHM_MONTH_DARK(RhythmMonthDarkWidget::class.java, WidgetViews.Design.RHYTHM, true, R.layout.widget_rhythm_month_dark, R.style.WidgetLook_Rhythm_Dark),
+        ;
 
-    private val looks = listOf(
-        Look(TodayLightWidget::class.java, R.layout.widget_today_light, false),
-        Look(TodayDarkWidget::class.java, R.layout.widget_today_dark, false),
-        Look(TodayLimeWidget::class.java, R.layout.widget_today_lime, false),
-        Look(MonthLightWidget::class.java, R.layout.widget_month_light, true),
-        Look(MonthDarkWidget::class.java, R.layout.widget_month_dark, true),
-        Look(MonthLimeWidget::class.java, R.layout.widget_month_lime, true),
-    )
+        /** The size a phone's home screen gives two by two and four by two, for a launcher that reports none. */
+        val defaultWidthDp: Float get() = if (month) 361f else 172f
+        val defaultHeightDp: Float get() = 172f
+
+        companion object {
+            fun of(provider: Class<*>): Kind? = entries.firstOrNull { it.provider == provider }
+        }
+    }
 
     private fun open(context: Context, action: String, code: Int): PendingIntent = PendingIntent.getActivity(
         context,
@@ -78,44 +95,63 @@ object WalletWidgets {
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
 
-    private fun views(context: Context, look: Look, figures: WidgetFigures, money: (Long) -> String) =
-        RemoteViews(context.packageName, look.layout).apply {
-            setOnClickPendingIntent(R.id.widget_root, open(context, Intent.ACTION_MAIN, 0))
-            if (look.month) {
-                setTextViewText(R.id.widget_title, figures.monthName)
-                setTextViewText(R.id.widget_expense, money(figures.month.expense))
-                setTextViewText(R.id.widget_income, money(figures.month.income))
-                setTextViewText(R.id.widget_balance, money(figures.balance))
-            } else {
-                setTextViewText(R.id.widget_title, figures.dayName)
-                setTextViewText(R.id.widget_expense, money(figures.today.expense))
-                setTextViewText(R.id.widget_income, money(figures.today.income))
-                setOnClickPendingIntent(R.id.widget_add, open(context, MainActivity.ACTION_ADD_BILL, 1))
-            }
-        }
+    /**
+     * The widget's size in dp as the launcher reports it, upright: the narrowest width and the tallest
+     * height, as a phone in portrait shows it.
+     */
+    fun sizeOf(options: Bundle, kind: Kind): Pair<Float, Float> {
+        val width = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH)
+        val height = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT)
+        return if (width > 0 && height > 0) width.toFloat() to height.toFloat() else kind.defaultWidthDp to kind.defaultHeightDp
+    }
 
-    /** Redraws every widget on the home screen. Does nothing when none are placed. */
-    suspend fun update(context: Context) {
+    /**
+     * Redraws every widget on the home screen, or with [only], just those of one kind (one that was
+     * resized). Does nothing when none are placed.
+     */
+    suspend fun update(context: Context, only: Pair<Kind, IntArray>? = null) {
         val manager = AppWidgetManager.getInstance(context) ?: return
-        val placed = looks.map { it to manager.getAppWidgetIds(ComponentName(context, it.provider)) }.filter { it.second.isNotEmpty() }
+        val placed = if (only != null) listOf(only)
+        else Kind.entries.map { it to manager.getAppWidgetIds(ComponentName(context, it.provider)) }.filter { it.second.isNotEmpty() }
         if (placed.isEmpty()) return
         val repo = (context.applicationContext as WalletApp).repository
         val snapshot = withTimeoutOrNull(LOAD_TIMEOUT_MILLIS) { repo.snapshot.first { it.ledgers.isNotEmpty() } } ?: return
         val settings = repo.store.settings.value
-        val figures = WidgetFigures.of(snapshot, settings, LocalDate.now())
-        val money = WidgetFigures.moneyText(settings)
-        placed.forEach { (look, ids) -> manager.updateAppWidget(ids, views(context, look, figures, money)) }
+        val today = LocalDate.now()
+        val content = WidgetViews.Content(
+            figures = WidgetFigures.of(snapshot, settings, today),
+            series = WidgetSeries.of(snapshot, settings, today),
+            money = WidgetFigures.moneyText(settings),
+            decimalChar = settings.moneyFormat.decimalChar,
+            hidden = settings.locked,
+        )
+        val taps = WidgetViews.Taps(open(context, Intent.ACTION_MAIN, 0), open(context, MainActivity.ACTION_ADD_BILL, 1))
+        placed.forEach { (kind, ids) ->
+            ids.forEach { id ->
+                val (width, height) = sizeOf(manager.getAppWidgetOptions(id), kind)
+                val views = WidgetViews.views(context, kind.design, kind.month, kind.layout, kind.style, content, width, height, taps)
+                manager.updateAppWidget(id, views)
+            }
+        }
     }
 
     private const val LOAD_TIMEOUT_MILLIS = 8_000L
 }
 
 abstract class WalletWidget : AppWidgetProvider() {
-    override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
+    override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) = later(context) { WalletWidgets.update(context) }
+
+    /** A resized widget is drawn again at its new size. */
+    override fun onAppWidgetOptionsChanged(context: Context, manager: AppWidgetManager, id: Int, options: Bundle) {
+        val kind = WalletWidgets.Kind.of(javaClass) ?: return
+        later(context) { WalletWidgets.update(context, kind to intArrayOf(id)) }
+    }
+
+    private fun later(context: Context, work: suspend () -> Unit) {
         val pending = goAsync()
         (context.applicationContext as WalletApp).scope.launch {
             try {
-                WalletWidgets.update(context)
+                work()
             } finally {
                 pending.finish()
             }
@@ -123,9 +159,11 @@ abstract class WalletWidget : AppWidgetProvider() {
     }
 }
 
-class TodayLightWidget : WalletWidget()
-class TodayDarkWidget : WalletWidget()
-class TodayLimeWidget : WalletWidget()
-class MonthLightWidget : WalletWidget()
-class MonthDarkWidget : WalletWidget()
-class MonthLimeWidget : WalletWidget()
+class PaceTodayLightWidget : WalletWidget()
+class PaceTodayDarkWidget : WalletWidget()
+class PaceMonthLightWidget : WalletWidget()
+class PaceMonthDarkWidget : WalletWidget()
+class RhythmTodayLightWidget : WalletWidget()
+class RhythmTodayDarkWidget : WalletWidget()
+class RhythmMonthLightWidget : WalletWidget()
+class RhythmMonthDarkWidget : WalletWidget()

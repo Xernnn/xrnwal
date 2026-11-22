@@ -138,76 +138,101 @@
             </intent-filter>
         </receiver>
 
+        <!-- Home-screen widgets, Pace first: each design in both sizes and both looks. -->
         <receiver
-            android:name=".work.TodayLightWidget"
+            android:name=".work.PaceTodayLightWidget"
             android:exported="false"
-            android:label="@string/widget_today_light">
+            android:label="@string/widget_pace_today_light">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/widget_today_light" />
+                android:resource="@xml/widget_pace_today_light" />
         </receiver>
 
         <receiver
-            android:name=".work.TodayDarkWidget"
+            android:name=".work.PaceTodayDarkWidget"
             android:exported="false"
-            android:label="@string/widget_today_dark">
+            android:label="@string/widget_pace_today_dark">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/widget_today_dark" />
+                android:resource="@xml/widget_pace_today_dark" />
         </receiver>
 
         <receiver
-            android:name=".work.TodayLimeWidget"
+            android:name=".work.PaceMonthLightWidget"
             android:exported="false"
-            android:label="@string/widget_today_lime">
+            android:label="@string/widget_pace_month_light">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/widget_today_lime" />
+                android:resource="@xml/widget_pace_month_light" />
         </receiver>
 
         <receiver
-            android:name=".work.MonthLightWidget"
+            android:name=".work.PaceMonthDarkWidget"
             android:exported="false"
-            android:label="@string/widget_month_light">
+            android:label="@string/widget_pace_month_dark">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/widget_month_light" />
+                android:resource="@xml/widget_pace_month_dark" />
         </receiver>
 
         <receiver
-            android:name=".work.MonthDarkWidget"
+            android:name=".work.RhythmTodayLightWidget"
             android:exported="false"
-            android:label="@string/widget_month_dark">
+            android:label="@string/widget_rhythm_today_light">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/widget_month_dark" />
+                android:resource="@xml/widget_rhythm_today_light" />
         </receiver>
 
         <receiver
-            android:name=".work.MonthLimeWidget"
+            android:name=".work.RhythmTodayDarkWidget"
             android:exported="false"
-            android:label="@string/widget_month_lime">
+            android:label="@string/widget_rhythm_today_dark">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/widget_month_lime" />
+                android:resource="@xml/widget_rhythm_today_dark" />
+        </receiver>
+
+        <receiver
+            android:name=".work.RhythmMonthLightWidget"
+            android:exported="false"
+            android:label="@string/widget_rhythm_month_light">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_rhythm_month_light" />
+        </receiver>
+
+        <receiver
+            android:name=".work.RhythmMonthDarkWidget"
+            android:exported="false"
+            android:label="@string/widget_rhythm_month_dark">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_rhythm_month_dark" />
         </receiver>
 
         <provider
