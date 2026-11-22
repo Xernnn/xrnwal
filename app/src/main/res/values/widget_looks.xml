@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  The widgets' looks, as theme overlays on each widget's layout. Text and shapes take their colours from
-  these, and WidgetViews reads the same ones to draw the charts, so a look is defined once.
-  Contrast against the surface: ink 16:1 or more, muted 5.3:1 or more, accentText 5.4:1 or more; the
-  charts' accent is 3.2:1 or more and the alert red 4.9:1 or more.
+  The widgets' looks, taken from the xrnwal tile: its green, its charcoal and its white, softened so
+  neither look is a black or white slab on the home screen. The layouts are themed with WidgetLook.Auto,
+  which is Sage here and Moss in values-night, so the launcher follows the phone's light or dark mode.
+  WidgetViews reads Sage and Moss by name to draw each chart once in each look.
+  Against the surface: ink 11:1, muted 5.3:1 or more, the charts' accent 3.3:1 or more. Going faster
+  than the month allows is drawn in the alert colour, which is the ink, not a red.
 -->
 <resources>
     <declare-styleable name="WidgetLook">
@@ -11,67 +13,35 @@
         <attr name="widgetInk" format="color" />
         <attr name="widgetMuted" format="color" />
         <attr name="widgetAccent" format="color" />
-        <attr name="widgetAccentText" format="color" />
         <attr name="widgetTrack" format="color" />
-        <attr name="widgetFaint" format="color" />
         <attr name="widgetAlert" format="color" />
         <attr name="widgetDisc" format="color" />
         <attr name="widgetPlus" format="color" />
     </declare-styleable>
 
-    <!-- Ink on a pale paper of the tile's green. The ring's green is 3.5:1 on the paper. -->
-    <style name="WidgetLook.Pace.Light" parent="">
-        <item name="widgetSurface">#F7F9EF</item>
-        <item name="widgetInk">#18181B</item>
-        <item name="widgetMuted">#5E6553</item>
-        <item name="widgetAccent">#6D8F00</item>
-        <item name="widgetAccentText">#567400</item>
-        <item name="widgetTrack">#E4E9D3</item>
-        <item name="widgetFaint">#E4E9D3</item>
-        <item name="widgetAlert">#CE2C35</item>
-        <item name="widgetDisc">#18181B</item>
-        <item name="widgetPlus">#FFFFFF</item>
-    </style>
-
-    <!-- Near white on the family black, the ring in a light banknote green (9.0:1). -->
-    <style name="WidgetLook.Pace.Dark" parent="">
-        <item name="widgetSurface">#18181B</item>
-        <item name="widgetInk">#FAFAFA</item>
-        <item name="widgetMuted">#A1A1AA</item>
-        <item name="widgetAccent">#A4C53E</item>
-        <item name="widgetAccentText">#B5D259</item>
-        <item name="widgetTrack">#2C2C31</item>
-        <item name="widgetFaint">#2C2C31</item>
-        <item name="widgetAlert">#FF6961</item>
-        <item name="widgetDisc">#A4C53E</item>
-        <item name="widgetPlus">#18181B</item>
-    </style>
-
-    <!-- White, today's bar in the tile's green (3.2:1), the days before it in a grey of the same hue. -->
-    <style name="WidgetLook.Rhythm.Light" parent="">
-        <item name="widgetSurface">#FFFFFF</item>
-        <item name="widgetInk">#18181B</item>
-        <item name="widgetMuted">#6B6B73</item>
-        <item name="widgetAccent">#7B9C17</item>
-        <item name="widgetAccentText">#567400</item>
-        <item name="widgetTrack">#C4C9AB</item>
-        <item name="widgetFaint">#E3E6DA</item>
-        <item name="widgetAlert">#CE2C35</item>
+    <!-- Light mode: a pale olive grey, charcoal figures, the charts in a deep olive. -->
+    <style name="WidgetLook.Sage" parent="">
+        <item name="widgetSurface">#D2D8BC</item>
+        <item name="widgetInk">#1D2210</item>
+        <item name="widgetMuted">#4D5539</item>
+        <item name="widgetAccent">#5E7B0E</item>
+        <item name="widgetTrack">#BAC39C</item>
+        <item name="widgetAlert">#1D2210</item>
         <item name="widgetDisc">#7B9C17</item>
-        <item name="widgetPlus">#FFFFFF</item>
-    </style>
-
-    <!-- The family black, today's bar in a light banknote green (10.4:1). -->
-    <style name="WidgetLook.Rhythm.Dark" parent="">
-        <item name="widgetSurface">#18181B</item>
-        <item name="widgetInk">#FAFAFA</item>
-        <item name="widgetMuted">#A1A1AA</item>
-        <item name="widgetAccent">#B5D259</item>
-        <item name="widgetAccentText">#B5D259</item>
-        <item name="widgetTrack">#46464E</item>
-        <item name="widgetFaint">#303036</item>
-        <item name="widgetAlert">#FF6961</item>
-        <item name="widgetDisc">#B5D259</item>
         <item name="widgetPlus">#18181B</item>
     </style>
+
+    <!-- Dark mode: a deep olive, cream figures, the charts in the tile's green lifted. -->
+    <style name="WidgetLook.Moss" parent="">
+        <item name="widgetSurface">#2D3519</item>
+        <item name="widgetInk">#EEF1E0</item>
+        <item name="widgetMuted">#B2BA98</item>
+        <item name="widgetAccent">#A9C94A</item>
+        <item name="widgetTrack">#434D2B</item>
+        <item name="widgetAlert">#EEF1E0</item>
+        <item name="widgetDisc">#A9C94A</item>
+        <item name="widgetPlus">#2D3519</item>
+    </style>
+
+    <style name="WidgetLook.Auto" parent="WidgetLook.Sage" />
 </resources>

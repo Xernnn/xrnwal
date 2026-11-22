@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Today, two by two: today's spending inside a ring that fills towards what today may spend, the day
+  under it. Themed with the phone's light or dark look. The texts are a sample for the picker; the app
+  fills them in. Its text is in the system's sans-serif, since a widget's layout can't use the app's fonts.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:theme="@style/WidgetLook.Auto"
+    tools:ignore="HardcodedText">
+
+    <ImageView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:scaleType="fitXY"
+        android:src="@drawable/widget_shape" />
+
+    <ImageView
+        android:id="@+id/widget_chart"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:paddingStart="19dp"
+        android:paddingTop="22dp"
+        android:paddingEnd="19dp"
+        android:paddingBottom="14dp"
+        android:importantForAccessibility="no"
+        android:scaleType="fitCenter"
+        android:src="@drawable/widget_sample_ring" />
+
+    <LinearLayout
+        android:layout_width="96dp"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:layout_marginTop="8dp"
+        android:gravity="center_horizontal"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/widget_hero"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="sans-serif"
+            android:textStyle="bold"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:text="$62"
+            android:textColor="?attr/widgetInk"
+            android:textSize="34sp"
+            android:autoSizeMaxTextSize="34sp"
+            android:autoSizeMinTextSize="14sp"
+            android:autoSizeStepGranularity="1sp"
+            android:autoSizeTextType="uniform"
+            android:gravity="center_horizontal" />
+
+        <TextView
+            android:id="@+id/widget_sub"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="sans-serif"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:text="of $124"
+            android:textColor="?attr/widgetMuted"
+            android:textSize="12sp"
+            android:layout_marginTop="3dp" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/widget_title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:fontFamily="sans-serif-medium"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:text="Sun 22"
+        android:textColor="?attr/widgetInk"
+        android:textSize="13sp"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="15dp" />
+
+    <include
+        layout="@layout/widget_part_add"
+        android:layout_width="28dp"
+        android:layout_height="28dp"
+        android:layout_gravity="top|end"
+        android:layout_margin="9dp" />
+</FrameLayout>

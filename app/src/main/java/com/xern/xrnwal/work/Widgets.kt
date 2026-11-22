@@ -8,7 +8,6 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.annotation.LayoutRes
-import androidx.annotation.StyleRes
 import com.xern.xrnwal.MainActivity
 import com.xern.xrnwal.R
 import com.xern.xrnwal.WalletApp
@@ -61,27 +60,18 @@ data class WidgetFigures(val today: Totals, val month: Totals, val balance: Long
 }
 
 object WalletWidgets {
-    /** A widget in the picker: its provider, its design and size, and the look its layout is themed with. */
-    enum class Kind(
-        val provider: Class<out WalletWidget>,
-        val design: WidgetViews.Design,
-        val month: Boolean,
-        @LayoutRes val layout: Int,
-        @StyleRes val style: Int,
-    ) {
-        PACE_TODAY_LIGHT(PaceTodayLightWidget::class.java, WidgetViews.Design.PACE, false, R.layout.widget_pace_today_light, R.style.WidgetLook_Pace_Light),
-        PACE_TODAY_DARK(PaceTodayDarkWidget::class.java, WidgetViews.Design.PACE, false, R.layout.widget_pace_today_dark, R.style.WidgetLook_Pace_Dark),
-        PACE_MONTH_LIGHT(PaceMonthLightWidget::class.java, WidgetViews.Design.PACE, true, R.layout.widget_pace_month_light, R.style.WidgetLook_Pace_Light),
-        PACE_MONTH_DARK(PaceMonthDarkWidget::class.java, WidgetViews.Design.PACE, true, R.layout.widget_pace_month_dark, R.style.WidgetLook_Pace_Dark),
-        RHYTHM_TODAY_LIGHT(RhythmTodayLightWidget::class.java, WidgetViews.Design.RHYTHM, false, R.layout.widget_rhythm_today_light, R.style.WidgetLook_Rhythm_Light),
-        RHYTHM_TODAY_DARK(RhythmTodayDarkWidget::class.java, WidgetViews.Design.RHYTHM, false, R.layout.widget_rhythm_today_dark, R.style.WidgetLook_Rhythm_Dark),
-        RHYTHM_MONTH_LIGHT(RhythmMonthLightWidget::class.java, WidgetViews.Design.RHYTHM, true, R.layout.widget_rhythm_month_light, R.style.WidgetLook_Rhythm_Light),
-        RHYTHM_MONTH_DARK(RhythmMonthDarkWidget::class.java, WidgetViews.Design.RHYTHM, true, R.layout.widget_rhythm_month_dark, R.style.WidgetLook_Rhythm_Dark),
+    /** A widget: its provider, whether it shows the month rather than today, and its layout. */
+    enum class Kind(val provider: Class<out WalletWidget>, val month: Boolean, @LayoutRes val layout: Int) {
+        TODAY(TodayWidget::class.java, false, R.layout.widget_today),
+        MONTH(MonthWidget::class.java, true, R.layout.widget_month),
+
+        /** 0.7.0's Pace · Month · Dark, hidden from the picker, so one placed then carries on as Month. */
+        PACE_MONTH(PaceMonthDarkWidget::class.java, true, R.layout.widget_month),
         ;
 
-        /** The size a phone's home screen gives two by two and four by two, for a launcher that reports none. */
-        val defaultWidthDp: Float get() = if (month) 361f else 172f
-        val defaultHeightDp: Float get() = 172f
+        /** The size a Redmi Note 14's home screen gives two by two and four by two, for a launcher that reports none. */
+        val defaultWidthDp: Float get() = if (month) 376f else 173f
+        val defaultHeightDp: Float get() = 187f
 
         companion object {
             fun of(provider: Class<*>): Kind? = entries.firstOrNull { it.provider == provider }
@@ -129,7 +119,7 @@ object WalletWidgets {
         placed.forEach { (kind, ids) ->
             ids.forEach { id ->
                 val (width, height) = sizeOf(manager.getAppWidgetOptions(id), kind)
-                val views = WidgetViews.views(context, kind.design, kind.month, kind.layout, kind.style, content, width, height, taps)
+                val views = WidgetViews.views(context, kind.month, kind.layout, content, width, height, taps)
                 manager.updateAppWidget(id, views)
             }
         }
@@ -159,11 +149,8 @@ abstract class WalletWidget : AppWidgetProvider() {
     }
 }
 
-class PaceTodayLightWidget : WalletWidget()
-class PaceTodayDarkWidget : WalletWidget()
-class PaceMonthLightWidget : WalletWidget()
+class TodayWidget : WalletWidget()
+class MonthWidget : WalletWidget()
+
+/** Month under the name 0.7.0 gave its Pace · Month · Dark, so a widget placed then keeps drawing. */
 class PaceMonthDarkWidget : WalletWidget()
-class RhythmTodayLightWidget : WalletWidget()
-class RhythmTodayDarkWidget : WalletWidget()
-class RhythmMonthLightWidget : WalletWidget()
-class RhythmMonthDarkWidget : WalletWidget()
