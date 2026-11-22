@@ -1,12 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">xrnwal</string>
-    <string name="widget_today_about">Today\'s expenses and income</string>
-    <string name="widget_month_about">This month\'s expenses, income and balance</string>
-    <string name="widget_today_light">Today, Light</string>
-    <string name="widget_today_dark">Today, Dark</string>
-    <string name="widget_today_lime">Today, Lime</string>
-    <string name="widget_month_light">Month, Light</string>
-    <string name="widget_month_dark">Month, Dark</string>
-    <string name="widget_month_lime">Month, Lime</string>
+    <string name="widget_pace_today_about">Today\'s spending against what the day may spend</string>
+    <string name="widget_pace_month_about">The month\'s spending against its budget, and the day it has reached</string>
+    <string name="widget_rhythm_today_about">Today\'s spending over the last seven days</string>
+    <string name="widget_rhythm_month_about">The month\'s spending, income and balance, day by day</string>
+    <string name="widget_pace_today_light">Pace · Today · Light</string>
+    <string name="widget_pace_today_dark">Pace · Today · Dark</string>
+    <string name="widget_pace_month_light">Pace · Month · Light</string>
+    <string name="widget_pace_month_dark">Pace · Month · Dark</string>
+    <string name="widget_rhythm_today_light">Rhythm · Today · Light</string>
+    <string name="widget_rhythm_today_dark">Rhythm · Today · Dark</string>
+    <string name="widget_rhythm_month_light">Rhythm · Month · Light</string>
+    <string name="widget_rhythm_month_dark">Rhythm · Month · Dark</string>
+    <string name="widget_add">Add a bill</string>
 </resources>

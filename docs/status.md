@@ -34,8 +34,9 @@ turns out not to be a replacement.
   Recents card went blank, while screenshots still worked. The widget's + opened the lock screen
   first from a cold start, then a new bill. Removing the PIN brought both back. Recents on HyperOS
   is not confirmed.
-- Widgets: all six placed on a launcher, live figures matching the Home header, an update on the
-  home screen after adding a bill, and the Today add button opening a new bill.
+- Widgets: the six earlier widgets were placed on a launcher, with live figures matching the Home
+  header, an update on the home screen after adding a bill, and the Today add button opening a new
+  bill. Pace and Rhythm, which replaced them in 0.7.0, have so far only been drawn without a phone.
 - Database upgrade: a phone on the earlier database version keeps every bill and rule, and rules
   carry on recording afterwards.
 - App icons: all eight, the restart after choosing one, and the choice surviving an app update.
@@ -100,8 +101,8 @@ server, was wiped, and restored them all with the same totals.
   a real bill. Here swipes always turn the page, and a bill is deleted by holding it.
 - Own artwork. Category and account icons are the app's own drawings in four styles, and an emoji
   tab keeps emoji as a choice. App icons are the wallet logo in eight colours.
-- Widgets are six original designs. Only one of the reference's six was seen, so their contents
-  follow its sizes and that one layout: today's figures, or the month's with balance.
+- Widgets are two original designs, Pace and Rhythm, in the reference's two sizes: today, and the
+  month with balance. Only one of the reference's six was seen.
 - Reports averages use calendar days. The reference counts hours, so a month containing the
   daylight saving change comes out a day short. This is kept on purpose, because it is the correct
   figure.

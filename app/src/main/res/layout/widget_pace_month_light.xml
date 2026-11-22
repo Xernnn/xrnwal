@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pace · Month in its light look: the design themed with its look. The app fills it in, and the widget picker shows it as it is. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:theme="@style/WidgetLook.Pace.Light"
+    tools:ignore="MergeRootFrame">
+
+    <include layout="@layout/widget_pace_month" />
+</FrameLayout>

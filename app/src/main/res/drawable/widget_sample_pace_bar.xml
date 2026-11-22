@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A sample of the Pace bar. Only the widget picker shows it: the app draws the real chart. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="164.5dp"
+    android:height="11dp"
+    android:viewportWidth="329"
+    android:viewportHeight="22">
+    <path
+        android:fillColor="?attr/widgetTrack"
+        android:pathData="M8,6 H321 A5,5 0 0 1 326,11 V11 A5,5 0 0 1 321,16 H8 A5,5 0 0 1 3,11 V11 A5,5 0 0 1 8,6 Z" />
+    <path
+        android:fillColor="?attr/widgetAccent"
+        android:pathData="M8,6 H227.33 A5,5 0 0 1 232.33,11 V11 A5,5 0 0 1 227.33,16 H8 A5,5 0 0 1 3,11 V11 A5,5 0 0 1 8,6 Z" />
+    <path
+        android:fillColor="?attr/widgetSurface"
+        android:pathData="M239.87,0 H239.87 A3,3 0 0 1 242.87,3 V19 A3,3 0 0 1 239.87,22 H239.87 A3,3 0 0 1 236.87,19 V3 A3,3 0 0 1 239.87,0 Z" />
+    <path
+        android:fillColor="?attr/widgetInk"
+        android:pathData="M239.87,1.5 H239.87 A1.5,1.5 0 0 1 241.37,3 V19 A1.5,1.5 0 0 1 239.87,20.5 H239.87 A1.5,1.5 0 0 1 238.37,19 V3 A1.5,1.5 0 0 1 239.87,1.5 Z" />
+</vector>
