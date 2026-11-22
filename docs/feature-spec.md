@@ -217,9 +217,9 @@ Digital (PIN of 4 to 8 digits), Gesture (pattern), Biometric unlock. Hint to set
 or pattern is kept as PBKDF2-HMAC-SHA256; one kept by an earlier build as a single SHA-256 is kept the
 new way the first time it opens the app. After five wrong PINs or patterns in a row the lock screen
 waits 30 seconds, doubling with each further miss; closing the app doesn't end the wait, and
-biometrics still open it. While any lock is set, widgets print dots instead of amounts and Recents
-keeps no picture of the app. Both reach past the lock screen, so the session being unlocked changes
-neither. Screenshots stay allowed on Android 13
+biometrics still open it. While any lock is set, widgets print dots instead of amounts and draw
+their charts empty, and Recents keeps no picture of the app. Both reach past the lock screen, so the
+session being unlocked changes neither. Screenshots stay allowed on Android 13
 and later. Older versions have no way to leave out only the Recents picture, so screenshots are
 blocked there.
 
@@ -286,11 +286,24 @@ Every gesture also has a visible way to do the same thing.
 
 ### Widgets
 
-Six, in Light, Dark and Lime. Today shows the day's expenses and income, and its + opens a new bill.
-Month shows the period's expenses, income and balance. Both use the Home header's rules for the
-active ledger, future bills, carryover and start of month, and redraw after any change, including
-any setting, and hourly. Amounts are hidden while an app lock is set, and the + still works because
-the new bill page opens behind the lock screen.
+Two designs, each in a two-by-two Today and a four-by-two Month, in Light and Dark: eight in the
+picker, Pace first.
+
+- Pace, Today: the day's spending in an open ring that fills towards what today may spend, the
+  budget left this morning shared over the days still to come. Month: the period's spending of its
+  budget, what is left and what each day may spend, over a bar with a mark at how far through the
+  month today is. Both turn red once spending runs ahead. With no budget (or budgets off) they
+  compare with the month's income; with neither, Month shows income and balance and an empty bar.
+- Rhythm, Today: the day's spending over the last seven days' bars, today's lit, weekday letters
+  under them. Month: the period's spending, income and balance over a bar for each of its days,
+  days to come as dots. A day of more than three times the middle day's spending (rent) is drawn
+  full height with a break, so the others keep their height.
+
+Every widget opens the app when tapped, and its + opens a new bill. The figures use the Home header's
+rules for the active ledger, future bills, carryover and start of month; Pace counts the budget as the
+budget card does. They redraw after any change, including any setting, hourly, and when a widget is
+resized, at its new size. While an app lock is set, amounts are dots and the charts are drawn empty,
+and the + still works because the new bill page opens behind the lock screen.
 
 ### Currencies
 

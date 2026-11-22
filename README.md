@@ -18,7 +18,8 @@ Laid out and working like the money app it replaced, in its own code and with it
 ## Screenshots
 
 Drawn without a phone from the made-up wallet in `ui/Previews.kt` (fourteen months of a student
-with a job), with `android preview render`, at phone size.
+with a job), and the widgets from the made-up month in `ui/WidgetPreviews.kt`, with
+`android preview render`, at phone size.
 
 | Home | Reports | Reports, further down |
 | --- | --- | --- |
@@ -34,6 +35,11 @@ with a job), with `android preview render`, at phone size.
 | --- | --- | --- |
 | ![Accounts: net assets as a ticket and the accounts by type](docs/screenshots/accounts.png) | ![Calendar: each day's totals](docs/screenshots/calendar.png) | ![Home in the light theme](docs/screenshots/home-light.png) |
 | Net assets, then each account by type. | Each day's expenses and income, and the chosen day's bills. | Home in the light theme. |
+
+| Pace widgets | Rhythm widgets | Pace, running ahead |
+| --- | --- | --- |
+| ![Pace widgets, light and dark: today's spending in a ring, and the month's against its budget](docs/screenshots/widgets-pace.png) | ![Rhythm widgets, light and dark: today's spending over the week, and the month's over each day](docs/screenshots/widgets-rhythm.png) | ![Pace widgets against a smaller budget, red](docs/screenshots/widgets-pace-ahead.png) |
+| Today against what the day may spend; the month against its budget, the mark at today. | Today over the last seven days; the month over each of its days. | Over what today may spend, and the month ahead of its days. |
 
 ## What it does
 
@@ -60,10 +66,15 @@ with a job), with `android preview render`, at phone size.
 - **Currencies:** a base currency, others with their rates, and a converter. A bill keeps the rate it
   was recorded at, so history doesn't move when rates change.
 - **Made to fit:** ledgers, categories and subcategories, tags, light and dark with colour accents,
-  your own start of month, number formats, reminders, six home-screen widgets and eight icon colours.
+  your own start of month, number formats, reminders and eight icon colours.
+- **Widgets:** Pace, a ring for how much of what today may spend is gone and a bar for the month
+  against its budget (or its income) with a mark at how far through the month today is, turning red
+  once spending runs ahead; and Rhythm, the day's or month's spending over a bar for each day. Each
+  comes two by two for today or four by two for the month, light or dark, with a + for a new bill,
+  and is drawn again at its new size when stretched.
 - **Lock:** a PIN of 4 to 8 digits, a pattern or biometrics. After five wrong tries it waits 30
   seconds, twice as long after each further miss. While a lock is set, widgets show dots instead of
-  amounts and Recents keeps no picture of the app.
+  amounts and empty charts, and Recents keeps no picture of the app.
 - **Files:** CSV export and import, in its own format or a general template, and backup files that
   hold everything but the app lock, photos included.
 
@@ -184,7 +195,7 @@ follows its screens, flows and words, without its mascot, notebook covers, key d
   pages and a bill is deleted by holding it; Balance Correction asks for the real balance and keeps
   a correction, where Money Manager only checks its stored balance; averages use calendar days, so a
   month with the daylight-saving change isn't a day short; one font; five accent colours instead of
-  whole themes; six widgets of its own design.
+  whole themes; widgets of its own design.
 - **Missing:** the other 12 languages, the camera, voice entry, Google Drive sync (replaced), and
   Rate, Share, Feedback, More Apps and Restore Purchase.
 
