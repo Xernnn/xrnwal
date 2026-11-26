@@ -46,6 +46,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.core.content.PermissionChecker
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.xern.xrnwal.data.Bill
 import com.xern.xrnwal.data.BillCsv
@@ -64,6 +66,8 @@ import com.xern.xrnwal.domain.DecimalMode
 import com.xern.xrnwal.domain.Money
 import com.xern.xrnwal.domain.SeparatorStyle
 import com.xern.xrnwal.domain.WeekendRule
+import com.xern.xrnwal.work.OemAutostart
+import com.xern.xrnwal.work.RestartIssue
 import java.io.File
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -121,11 +125,31 @@ fun RemindersScreen() {
     val s = snap()
     val nav = LocalNav.current
     val repo = LocalRepo.current
+    val context = LocalContext.current
+    // Read again whenever the page comes back from a system page.
+    var looked by remember { mutableIntStateOf(0) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { looked++ }
+    val issues = remember(looked, s.reminders) {
+        RestartIssue.of(s.reminders.any { it.enabled }, OemAutostart.enabled(context), OemAutostart.batteryExempt(context))
+    }
     Page(
         "Reminders",
         actions = { IconButton({ nav.navigate("reminder/edit") }) { Icon(Icons.Filled.AddBox, "New reminder") } },
     ) {
         ScrollBody {
+            if (issues.isNotEmpty()) {
+                Panel {
+                    issues.forEachIndexed { index, issue ->
+                        if (index > 0) Divider()
+                        ListRow(issue.label, issue.action, valueColor = MaterialTheme.colorScheme.error) {
+                            when (issue) {
+                                RestartIssue.AUTOSTART_OFF -> OemAutostart.open(context)
+                                RestartIssue.BATTERY_OPTIMISED -> OemAutostart.askBattery(context)
+                            }
+                        }
+                    }
+                }
+            }
             if (s.reminders.isEmpty()) EmptyNote("No reminders yet")
             s.reminders.forEach { reminder ->
                 Panel {

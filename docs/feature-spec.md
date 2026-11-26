@@ -210,6 +210,10 @@ is shown at the bottom of Mine and must stay there.
 ### Reminders
 
 Name, time, repeat (Daily, Weekly, Monthly), notification content presets or custom title/body.
+While a reminder is on, the page lists what can keep it from ringing, each opening its fix:
+"Autostart off" (HyperOS turns it off at every install, and then a reminder doesn't come back after
+a reboot until the app is opened) and "Battery optimised" (Android's question to let the app run in
+the background).
 
 ### Password Protection
 
