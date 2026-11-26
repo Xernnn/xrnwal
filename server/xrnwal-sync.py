@@ -432,8 +432,57 @@ def read_doc(path):
         return None
 
 
+def is_state(doc):
+    return isinstance(doc, dict) and type(doc.get("version")) is int
+
+
+def newest_kept(user):
+    """The newest copy history/ (or failing that daily/) keeps, or None. Newest by when it was
+    filed, as keep_old counts: after state.json is put back from an older copy, the numbers in
+    history/ go backwards."""
+    for sub, pattern in (("history", HISTORY_ID), ("daily", DAILY_ID)):
+        d = user_dir(user, sub)
+        names = [n for n in os.listdir(d) if n.endswith(".json") and pattern.fullmatch(n[:-5])] \
+            if os.path.isdir(d) else []
+        if sub == "history":
+            names.sort(key=lambda n: (os.stat(os.path.join(d, n)).st_mtime_ns, int(n[:-5])), reverse=True)
+        else:
+            names.sort(reverse=True)
+        for n in names:
+            doc = read_doc(os.path.join(d, n))
+            if is_state(doc):
+                return doc
+    return None
+
+
 def read_state(user):
-    return read_doc(user_dir(user, "state.json")) or {"version": 0, "data": {}}
+    """The user's copy: {"version", "tag", "trail", "updated", "by", "sha256", "data"}, version 0
+    while there is none. Under `lock`. One that can't be read (a power cut mid-write, a damaged
+    disk) used to read as "version 0, empty": the next write from a phone saying If-Match: * went
+    over it, the count started again and took the numbers of the copies in history/. It is moved
+    aside now, said in the log, and the newest kept copy put in its place, older than what the
+    phones have seen, so each of them asks before it follows."""
+    path = user_dir(user, "state.json")
+    try:
+        with open(path, encoding="utf-8") as f:
+            doc = json.load(f)
+    except FileNotFoundError:
+        return {"version": 0, "data": {}}
+    except (OSError, ValueError, RecursionError):
+        doc = None
+    if is_state(doc):
+        return doc
+    aside = f"{path}.damaged-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S.%fZ')}"
+    try:
+        os.replace(path, aside)
+    except OSError:
+        aside = path
+    kept = newest_kept(user)
+    if kept and aside != path:  # never over the only copy of what couldn't be read
+        write_json(path, kept)
+    sys.stderr.write(f"{user}: state.json can't be read; kept as {os.path.basename(aside)}, "
+                     f"and version {kept['version'] if kept else 0} put in its place\n")
+    return kept or {"version": 0, "data": {}}
 
 
 def nested_within(value, limit):
