@@ -117,6 +117,20 @@ data class Settings(
         lastMissAt = other.lastMissAt,
     )
 
+    /**
+     * How this phone is looking at the wallet: the ledger shown, amounts hidden, the trend scrolled,
+     * and the account a new bill starts on. They belong to the phone like the lock: synced, every
+     * ledger switch or tap on the eye changed the server's copy, so the next sync sent up a whole
+     * new one and took a place among its kept copies, and taking the server's copy changed this
+     * phone's view.
+     */
+    fun withViewOf(other: Settings): Settings = copy(
+        activeLedger = other.activeLedger,
+        hideAmounts = other.hideAmounts,
+        trendScroll = other.trendScroll,
+        lastAccountId = other.lastAccountId,
+    )
+
     companion object {
         const val THEME_LIGHT = 0
         const val THEME_DARK = 1
@@ -144,13 +158,16 @@ class SettingsStore(private val prefs: SharedPreferences) {
         prefs.edit().putString(KEY, json.encodeToString(next)).apply()
     }
 
-    /** What a backup file and the server's copy hold: everything but the app lock, which belongs to this phone. */
-    fun export(): String = json.encodeToString(state.value.withoutLock())
+    /**
+     * What a backup file and the server's copy hold: everything but the app lock and the view
+     * ([Settings.withViewOf]), which belong to this phone.
+     */
+    fun export(): String = json.encodeToString(state.value.withoutLock().withViewOf(Settings()))
 
-    /** Takes settings from a backup file or the server's copy, keeping this phone's own app lock. */
+    /** Takes settings from a backup file or the server's copy, keeping this phone's own app lock and view. */
     fun restore(text: String) {
         val restored = json.decodeFromString<Settings>(text)
-        update { restored.withLockOf(it) }
+        update { restored.withLockOf(it).withViewOf(it) }
     }
 
     private companion object {
