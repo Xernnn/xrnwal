@@ -4,11 +4,25 @@ import com.xern.xrnwal.data.Reminder
 import com.xern.xrnwal.work.Reminders
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 import java.time.LocalDate
 import java.time.LocalDateTime
 
 class ReminderTest {
+    @Test
+    fun aReminderRingsAtItsMinuteWhereverThePhoneAllowsExactAlarms() {
+        // setAndAllowWhileIdle let a daily reminder, set a day ahead once it had rung, come late.
+        assertTrue(Reminders.exact(26) { false })
+        assertTrue(Reminders.exact(34) { true })
+        assertFalse("refused: inexact, as before", Reminders.exact(34) { false })
+        val manifest = File("src/main/AndroidManifest.xml").readText()
+        assertTrue("android.permission.USE_EXACT_ALARM" in manifest)
+        assertTrue(Regex("SCHEDULE_EXACT_ALARM\"\\s+android:maxSdkVersion=\"32\"").containsMatchIn(manifest))
+    }
+
     private fun reminder(repeat: Int, start: LocalDate) =
         Reminder(id = 1, name = "Evening", minuteOfDay = 20 * 60, repeat = repeat, startEpochDay = start.toEpochDay())
 
