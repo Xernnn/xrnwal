@@ -140,7 +140,9 @@ In the app: Mine, Data synchronization, then the server's address ending in `/xr
 
 It keeps one JSON document per user (the backup format, without the app lock) and the bill photos,
 behind HTTP Basic auth checked against the htpasswd users file shared with the other xrn sync
-servers. Every write needs `If-Match`, so a phone that never synced can't wipe the copy by
+servers, or a device token (`Authorization: Bearer xrndev_…`): a login of one device's own, for
+the services it uses, kept as a SHA-256 in `device-tokens.json` beside the users file and revoked
+on its own. Every write needs `If-Match`, so a phone that never synced can't wipe the copy by
 accident; `/versions` lists the earlier copies, and `/health` answers without a login. Wrong
 passwords lock an address out for a while. Behind a proxy that passes the path on, it answers under
 `/xrnwal` and under `/xrnwallet`, the path from before the rename.
