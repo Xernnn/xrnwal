@@ -8,6 +8,7 @@ import com.xern.xrnwal.data.Category
 import com.xern.xrnwal.data.EarlierCopy
 import com.xern.xrnwal.data.Ledger
 import com.xern.xrnwal.data.PushResult
+import com.xern.xrnwal.data.Refusal
 import com.xern.xrnwal.data.ServerAddress
 import com.xern.xrnwal.data.ServerCopy
 import com.xern.xrnwal.data.ServerFailure
@@ -592,6 +593,36 @@ class SyncEngineTest {
         assertEquals(41L, SyncStore(prefs).load().version)
         assertEquals("https://home.example.net/xrnwal", prefs.getString("address", null))
         assertNull(SyncStore(MemoryPrefs()).address())
+    }
+
+    @Test fun aRefusedPasswordIsNotSentAgainByItselfUntilTheOwnerSignsIn() {
+        val prefs = MemoryPrefs()
+        val minute = 60_000L
+        assertFalse(SyncStore(prefs).holdsBack(now = 0))
+        // Ten bills saved after the password changed were ten wrong logins, and the address was locked out.
+        SyncStore(prefs).refusal = Refusal.of(ServerFailure(401), now = 1_000)
+        val restarted = SyncStore(prefs)
+        assertTrue(restarted.refusal!!.signInAgain)
+        assertTrue(restarted.holdsBack(now = 1_000 + 5 * minute))
+        assertTrue(restarted.holdsBack(now = 1_000 + 30 * 24 * 60 * minute))
+        // Entering the password again is the only way out; disconnecting forgets it too.
+        restarted.refusal = null
+        assertFalse(SyncStore(prefs).holdsBack(now = 1_000 + 5 * minute))
+        SyncStore(prefs).refusal = Refusal.of(ServerFailure(401), now = 1_000)
+        SyncStore(prefs).forget()
+        assertFalse(SyncStore(prefs).holdsBack(now = 1_000))
+    }
+
+    @Test fun aLockedOutAddressIsLeftAloneForTheServersWindowOnly() {
+        val prefs = MemoryPrefs()
+        val minute = 60_000L
+        SyncStore(prefs).refusal = Refusal.of(ServerFailure(429), now = 0)
+        assertFalse(SyncStore(prefs).refusal!!.signInAgain)
+        assertTrue(SyncStore(prefs).holdsBack(now = 14 * minute))
+        assertFalse(SyncStore(prefs).holdsBack(now = 15 * minute))
+        // A server that's down or unreachable says nothing about the login.
+        for (status in listOf(0, 403, 404, 500, 503)) assertNull(Refusal.of(ServerFailure(status), now = 0))
+        assertNull(Refusal.of(null, now = 0))
     }
 
     @Test fun photoNamesFromACopyCantLeaveTheFolder() {

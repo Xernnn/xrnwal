@@ -73,6 +73,24 @@ class AppLockTest {
         assertFalse(again.biometric)
         assertTrue(again.locked)
     }
+
+    @Test
+    fun howThisPhoneLooksAtTheWalletIsNotSyncedAndTakingACopyKeepsIt() {
+        val store = SettingsStore(MemoryPrefs())
+        val before = store.export()
+        // Switching ledger, hiding amounts or scrolling the trend uploaded a whole new copy.
+        store.update { it.copy(activeLedger = 3, hideAmounts = true, trendScroll = true, lastAccountId = 7) }
+        assertEquals(before, store.export())
+        store.update { it.copy(nickname = "Xern") }
+        assertNotEquals(before, store.export())
+
+        // Taking the server's copy (or a backup file) keeps this phone's view.
+        val other = Settings(nickname = "From the server", activeLedger = 9, hideAmounts = false, trendScroll = false, lastAccountId = 2)
+        store.restore(json.encodeToString(other))
+        val now = store.settings.value
+        assertEquals("From the server", now.nickname)
+        assertEquals(listOf<Any?>(3L, true, true, 7L), listOf(now.activeLedger, now.hideAmounts, now.trendScroll, now.lastAccountId))
+    }
 }
 
 class LockSecretTest {

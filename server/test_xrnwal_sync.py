@@ -180,6 +180,42 @@ class SyncServerTest(unittest.TestCase):
         self.assertEqual(status, 412)
         self.assertEqual(json.loads(self.call("GET", "/state")[1])["bills"][0]["note"], "two, from the other phone")
 
+    def test_a_copy_that_cant_be_read_is_kept_and_the_newest_kept_copy_stands_in(self):
+        # It read as "version 0, empty": a phone saying If-Match: * went over it with nothing filed,
+        # and the count started again, taking the numbers of the copies kept in history/.
+        tags = []
+        for n in range(4):
+            tags.append(self.put(document(f"bill {n}"), f'"{n}"')[2]["X-Tag"])
+        with open(self.state_file(), "w") as f:
+            f.write('{"version": 4, "data": {"bills": [{"no')  # a power cut part way through
+        with unittest.mock.patch("sys.stderr", new_callable=io.StringIO) as log:
+            status, body, headers = self.call("GET", "/state", headers={"If-None-Match": '"4"', "X-Base-Tag": tags[3]})
+        # Older than what the phone saw, so it asks before it follows.
+        self.assertEqual((200, '"3"', "bill 2", "0"),
+                         (status, headers["ETag"], json.loads(body)["bills"][0]["note"], headers["X-Follows"]))
+        folder = os.path.dirname(self.state_file())
+        aside = [n for n in os.listdir(folder) if n.startswith("state.json.damaged-")]
+        self.assertEqual(1, len(aside))
+        with open(os.path.join(folder, aside[0])) as f:
+            self.assertIn('"version": 4', f.read())
+        self.assertIn("can't be read", log.getvalue())
+        # The count carries on from the copy that stood in, and nothing kept is written over.
+        status, _, headers = self.put(document("again"), "*")
+        self.assertEqual((200, '"4"'), (status, headers["ETag"]))
+        self.assertEqual([3, 2, 1], [e["version"] for e in json.loads(self.call("GET", "/versions")[1])])
+        status, body, _ = self.call("GET", "/versions/1")
+        self.assertEqual((200, "bill 0"), (status, json.loads(body)["bills"][0]["note"]))
+
+    def test_a_copy_that_cant_be_read_with_nothing_kept_is_still_kept_aside(self):
+        os.makedirs(os.path.dirname(self.state_file()))
+        with open(self.state_file(), "w") as f:
+            f.write("")
+        with unittest.mock.patch("sys.stderr", new_callable=io.StringIO):
+            status, body, headers = self.call("GET", "/state")
+        self.assertEqual((200, {}, '"0"'), (status, json.loads(body), headers["ETag"]))
+        folder = os.path.dirname(self.state_file())
+        self.assertEqual(1, len([n for n in os.listdir(folder) if n.startswith("state.json.damaged-")]))
+
     def test_a_phone_that_sends_no_tag_is_answered_by_version_as_before(self):
         self.put(document("one"), '"0"')
         self.assertEqual(self.call("GET", "/state", headers={"If-None-Match": '"1"'})[0], 304)

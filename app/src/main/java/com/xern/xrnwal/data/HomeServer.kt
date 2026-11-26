@@ -195,6 +195,19 @@ class SyncStore(private val prefs: SharedPreferences) : SyncMetaStore {
         get() = prefs.getBoolean(PHOTOS, true)
         set(value) = prefs.edit().putBoolean(PHOTOS, value).apply()
 
+    /** Kept on disk, so a restart or the background worker doesn't send a refused login again. */
+    var refusal: Refusal?
+        get() = prefs.getInt(REFUSED, 0).takeIf { it != 0 }?.let { Refusal(it, prefs.getLong(REFUSED_AT, 0)) }
+        set(value) {
+            val edit = prefs.edit()
+            if (value == null) edit.remove(REFUSED).remove(REFUSED_AT)
+            else edit.putInt(REFUSED, value.status).putLong(REFUSED_AT, value.at)
+            edit.commit()
+        }
+
+    /** Whether an automatic sync must leave the server alone at [now]. */
+    fun holdsBack(now: Long): Boolean = refusal?.holds(now) == true
+
     fun address(): String? = prefs.getString(ADDRESS, null)
 
     fun login(): ServerLogin? {
@@ -248,6 +261,8 @@ class SyncStore(private val prefs: SharedPreferences) : SyncMetaStore {
         const val UNANSWERED = "unanswered"
         const val SYNCED_AT = "syncedAt"
         const val TAG = "tag"
+        const val REFUSED = "refused"
+        const val REFUSED_AT = "refusedAt"
     }
 }
 

@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
@@ -127,8 +128,21 @@ object Reminders {
             return
         }
         val millis = next(reminder, LocalDateTime.now()).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, millis, intent(context, reminder.id))
+        if (exact(Build.VERSION.SDK_INT) { Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && manager.canScheduleExactAlarms() }) {
+            manager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, millis, intent(context, reminder.id))
+        } else {
+            manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, millis, intent(context, reminder.id))
+        }
     }
+
+    /**
+     * Whether a reminder can ring at its minute. An inexact alarm set a day ahead, as each daily
+     * one is once it has rung, gets a delivery window sized from that day, so on an idle phone it
+     * came well after its time. Before Android 12 exact alarms need nothing; from 13 the manifest's
+     * USE_EXACT_ALARM is granted at install (12 has SCHEDULE_EXACT_ALARM, granted by default), and
+     * where it is still refused the alarm is set inexact as before.
+     */
+    fun exact(sdk: Int, allowed: () -> Boolean): Boolean = sdk < Build.VERSION_CODES.S || allowed()
 
     fun scheduleAll(context: Context, reminders: List<Reminder>) = reminders.forEach { schedule(context, it) }
 

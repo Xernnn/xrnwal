@@ -52,6 +52,25 @@ class ServerFailure(val status: Int) : Exception(failureText(status)) {
     val temporary: Boolean get() = status == 0 || status >= 500
 }
 
+/**
+ * A login the server turned down, which no automatic sync sends again: each try is one more wrong
+ * password against the address, and ten lock it out. A wrong login (401) waits for the person to
+ * sign in again; a locked-out address (429), for the server's window to pass.
+ */
+data class Refusal(val status: Int, val at: Long) {
+    val signInAgain: Boolean get() = status == 401
+
+    fun holds(now: Long): Boolean = signInAgain || now - at < LOCKOUT_MILLIS
+
+    companion object {
+        /** The server's FAIL_WINDOW_S. */
+        const val LOCKOUT_MILLIS = 15 * 60_000L
+
+        fun of(failure: Exception?, now: Long): Refusal? =
+            (failure as? ServerFailure)?.status?.takeIf { it == 401 || it == 429 }?.let { Refusal(it, now) }
+    }
+}
+
 fun failureText(status: Int): String = when {
     status == 401 -> "Wrong user name or password."
     status == 429 -> "Too many wrong passwords. Try again in 15 minutes."

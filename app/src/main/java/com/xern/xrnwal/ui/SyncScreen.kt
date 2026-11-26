@@ -107,9 +107,13 @@ private fun ConnectedPanel(sync: SyncManager, status: SyncStatus) {
         Divider()
         ListRow("Disconnect") { leaving = true }
     }
-    status.error?.let { Muted(it) }
-    PrimaryButton(if (status.running) "Syncing…" else "Sync now", Modifier.fillMaxWidth(), enabled = !status.running) {
-        scope.launch { sync.syncNow() }
+    if (status.signInAgain) {
+        SignInAgain(sync)
+    } else {
+        status.error?.let { Muted(it) }
+        PrimaryButton(if (status.running) "Syncing…" else "Sync now", Modifier.fillMaxWidth(), enabled = !status.running) {
+            scope.launch { sync.syncNow(asked = true) }
+        }
     }
     if (leaving) {
         ConfirmDialog(
@@ -120,6 +124,25 @@ private fun ConnectedPanel(sync: SyncManager, status: SyncStatus) {
         ) {
             leaving = false
             sync.disconnect()
+        }
+    }
+}
+
+/** The server turned the saved password down; only the password is asked for again. */
+@Composable
+private fun SignInAgain(sync: SyncManager) {
+    val scope = rememberCoroutineScope()
+    var password by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var problem by remember { mutableStateOf<String?>(null) }
+    Muted(problem ?: "Sign in again")
+    WalletField(password, { password = it }, Modifier.fillMaxWidth(), "Password", password = true)
+    PrimaryButton(if (busy) "Signing in…" else "Sign in", Modifier.fillMaxWidth(), enabled = !busy) {
+        busy = true
+        problem = null
+        scope.launch {
+            problem = sync.signInAgain(password)
+            busy = false
         }
     }
 }

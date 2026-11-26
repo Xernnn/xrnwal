@@ -64,9 +64,6 @@ object WalletWidgets {
     enum class Kind(val provider: Class<out WalletWidget>, val month: Boolean, @LayoutRes val layout: Int) {
         TODAY(TodayWidget::class.java, false, R.layout.widget_today),
         MONTH(MonthWidget::class.java, true, R.layout.widget_month),
-
-        /** 0.7.0's Pace · Month · Dark, hidden from the picker, so one placed then carries on as Month. */
-        PACE_MONTH(PaceMonthDarkWidget::class.java, true, R.layout.widget_month),
         ;
 
         /** The size a Redmi Note 14's home screen gives two by two and four by two, for a launcher that reports none. */
@@ -151,6 +148,3 @@ abstract class WalletWidget : AppWidgetProvider() {
 
 class TodayWidget : WalletWidget()
 class MonthWidget : WalletWidget()
-
-/** Month under the name 0.7.0 gave its Pace · Month · Dark, so a widget placed then keeps drawing. */
-class PaceMonthDarkWidget : WalletWidget()

@@ -28,6 +28,8 @@ data class SyncStatus(
     val syncedAt: Long = 0,
     val error: String? = null,
     val conflict: SyncOutcome.Conflict? = null,
+    /** The server turned the saved login down: nothing is sent until the password is entered again. */
+    val signInAgain: Boolean = false,
 ) {
     val connected: Boolean get() = address != null
 }
@@ -40,7 +42,14 @@ class SyncManager(context: Context, private val repo: Repository, private val sc
     private var login: ServerLogin? = store.login()
 
     private val state = MutableStateFlow(
-        SyncStatus(login?.address, login?.user.orEmpty(), store.auto, store.photos, syncedAt = store.load().syncedAt),
+        SyncStatus(
+            login?.address,
+            login?.user.orEmpty(),
+            store.auto,
+            store.photos,
+            syncedAt = store.load().syncedAt,
+            signInAgain = store.refusal?.signInAgain == true,
+        ),
     )
     val status: StateFlow<SyncStatus> = state
 
@@ -73,6 +82,9 @@ class SyncManager(context: Context, private val repo: Repository, private val sc
     private suspend fun attempt(login: ServerLogin, work: suspend (SyncEngine) -> SyncOutcome): Exception? =
         scope.async(Dispatchers.IO) {
             lock.withLock {
+                // The saved login, turned down: sending it again would only count one more wrong password.
+                val saved = login === this@SyncManager.login
+                if (saved && store.refusal?.signInAgain == true) return@withLock ServerFailure(401)
                 state.update { it.copy(running = true, error = null) }
                 var failure: Exception? = null
                 var conflict: SyncOutcome.Conflict? = null
@@ -84,12 +96,14 @@ class SyncManager(context: Context, private val repo: Repository, private val sc
                     // Beyond the server failing, a copy this phone can't read. Nothing was replaced.
                     failure = e
                 } finally {
+                    if (saved) noteAnswer(failure)
                     state.update {
                         it.copy(
                             running = false,
                             conflict = conflict,
                             syncedAt = store.load().syncedAt,
                             error = failure?.let(::describe),
+                            signInAgain = store.refusal?.signInAgain == true,
                         )
                     }
                 }
@@ -97,15 +111,26 @@ class SyncManager(context: Context, private val repo: Repository, private val sc
             }
         }.await()
 
+    /** Remembers a refused login, and forgets it once the server lets this phone in. */
+    private fun noteAnswer(failure: Exception?) {
+        val refusal = Refusal.of(failure, System.currentTimeMillis())
+        if (refusal != null) store.refusal = refusal else if (failure == null) store.refusal = null
+    }
+
     private fun describe(failure: Exception): String = when (failure) {
         is ServerFailure -> failure.message.orEmpty()
         is UnusableBackup -> "The server's copy can't be used here: ${failure.message}. Nothing on this phone changed."
         else -> "The server's copy could not be used. Nothing on this phone changed."
     }
 
-    /** Returns true when the sync should be tried again later, as with a phone that's offline. */
-    suspend fun syncNow(): Boolean {
-        val failure = attempt(login ?: return false) { it.sync() }
+    /**
+     * Returns true when the sync should be tried again later, as with a phone that's offline. Unless
+     * the person [asked] for it, it leaves a server alone that turned this phone's login down.
+     */
+    suspend fun syncNow(asked: Boolean = false): Boolean {
+        val login = login ?: return false
+        if (!asked && store.holdsBack(System.currentTimeMillis())) return false
+        val failure = attempt(login) { it.sync() }
         val again = (failure as? ServerFailure)?.temporary == true
         if (again && autoSyncing) SyncWorker.retrySoon(app)
         return again
@@ -121,10 +146,31 @@ class SyncManager(context: Context, private val repo: Repository, private val sc
         // Whatever an earlier connection left behind says nothing about this server.
         withContext(Dispatchers.IO) { store.save(SyncMeta()) }
         attempt(login) { it.sync() }?.let { return describe(it) }
-        withContext(Dispatchers.IO) { store.saveLogin(login) }
+        withContext(Dispatchers.IO) {
+            store.saveLogin(login)
+            store.refusal = null
+        }
         this.login = login
-        state.update { it.copy(address = login.address, user = login.user) }
+        state.update { it.copy(address = login.address, user = login.user, signInAgain = false) }
         SyncWorker.apply(app, autoSyncing)
+        return null
+    }
+
+    /**
+     * Takes the password again after the server turned the saved one down, keeping everything else:
+     * the same server, and the copy this phone matched there. Returns what went wrong, or null.
+     */
+    suspend fun signInAgain(password: String): String? {
+        val saved = login ?: return null
+        if (password.isEmpty()) return "Enter the password."
+        val login = saved.copy(password = password)
+        attempt(login) { it.sync() }?.let { return describe(it) }
+        withContext(Dispatchers.IO) {
+            store.saveLogin(login)
+            store.refusal = null
+        }
+        this.login = login
+        state.update { it.copy(signInAgain = false) }
         return null
     }
 
@@ -157,6 +203,7 @@ class SyncManager(context: Context, private val repo: Repository, private val sc
 
     /** Throws [ServerFailure] when the server can't be reached. */
     suspend fun earlierCopies(): List<EarlierCopy> = withContext(Dispatchers.IO) {
+        if (store.refusal?.signInAgain == true) throw ServerFailure(401)
         HomeServer(login ?: throw ServerFailure(0), Build.MODEL.take(MAX_DEVICE_NAME)).earlierCopies()
     }
 

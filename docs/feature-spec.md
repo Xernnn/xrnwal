@@ -210,6 +210,10 @@ is shown at the bottom of Mine and must stay there.
 ### Reminders
 
 Name, time, repeat (Daily, Weekly, Monthly), notification content presets or custom title/body.
+While a reminder is on, the page lists what can keep it from ringing, each opening its fix:
+"Autostart off" (HyperOS turns it off at every install, and then a reminder doesn't come back after
+a reboot until the app is opened) and "Battery optimised" (Android's question to let the app run in
+the background).
 
 ### Password Protection
 
@@ -343,6 +347,11 @@ automatic syncing, last sync time, sync photo, and sync now. Earlier copies and 
 The phone sends its whole wallet as one document, a few seconds after any change and when the app
 opens. If it can't reach the server it retries by itself, and it checks every 6 hours as well. Every
 copy the server replaces is kept: the last 20, and the first of each day for 60 days.
+
+A password the server turns down is not sent again by itself: no change, opening or 6-hourly check
+syncs until the password is entered again under "Sign in again", which keeps the server and the copy
+this phone matched. After "too many wrong passwords" it waits out the server's 15 minutes. Each try
+would count as one more wrong password, and ten lock the phone's address out.
 
 - The app lock never leaves the phone. Taking a copy from the server keeps this phone's own lock, so
   a new phone starts with no lock until one is set.
