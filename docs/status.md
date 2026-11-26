@@ -53,8 +53,7 @@ shows every upload accepted. On 2026-11-17 the phone, on 0.4.0, was restored fro
 backup file was saved, Delete all data emptied it, Data synchronization asked which copy to keep,
 and the server's brought back all 571 bills. All-time totals, 534 records, every account balance,
 net assets and November's figures matched what the phone showed before, and the server's copy was
-unchanged. The emptied phone's side was filed under Earlier copies, as 0 bills. Home came back on
-October rather than November; changing tabs doesn't do that, and it hasn't been reproduced.
+unchanged. The emptied phone's side was filed under Earlier copies, as 0 bills.
 
 - Paging, on the release build on an emulator with animations on: a page following a slow drag, flicks
   over bills both ways deleting nothing, arrows adding up on quick presses, picker jumps, weeks, Reports,
